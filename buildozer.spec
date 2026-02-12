@@ -3,7 +3,7 @@ title = AI Vision Assistant
 package.name = aivisionassistant
 package.domain = com.ganesh
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas,tflite
+source.include_exts = py,png,jpg,kv,atlas,tflite,txt
 
 version = 0.1
 
