@@ -4,6 +4,8 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-22.04
+    # Increase timeout to 60 minutes so it doesn't fail at 33 minutes again
+    timeout-minutes: 60 
     permissions:
       contents: write
 
@@ -25,9 +27,8 @@ jobs:
       - name: Build APK with Buildozer
         run: |
           export PATH=$PATH:~/.local/bin
-          # Clean old failed attempts and start a fresh build
-          buildozer appclean
-          # 'yes |' automatically accepts all Android licenses
+          # We skip 'appclean' this time so it can try to use 
+          # any work it already finished in the last run.
           yes | buildozer android debug
         env:
           BUILDOZER_ALLOW_ORG_NAME_AS_PACKAGE_NAME: 1
