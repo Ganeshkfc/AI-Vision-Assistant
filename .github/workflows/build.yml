@@ -4,8 +4,12 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -21,13 +25,15 @@ jobs:
       - name: Build APK with Buildozer
         run: |
           export PATH=$PATH:~/.local/bin
-          # This command accepts licenses and builds the debug APK
+          # Clean old failed attempts and start a fresh build
+          buildozer appclean
+          # 'yes |' automatically accepts all Android licenses
           yes | buildozer android debug
         env:
           BUILDOZER_ALLOW_ORG_NAME_AS_PACKAGE_NAME: 1
 
-      - name: Upload Finished APK
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AI-Vision-APK
+          name: AI-Vision-App
           path: bin/*.apk
