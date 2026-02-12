@@ -1,13 +1,11 @@
-name: Build APK
-on: [push, pull_request]
+name: Build AI Vision Assistant
+on:
+  push:
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-22.04
-    # Set to 60 to prevent the previous 33-minute timeout
-    timeout-minutes: 60 
-    permissions:
-      contents: write
 
     steps:
       - name: Checkout Code
@@ -18,29 +16,32 @@ jobs:
         with:
           python-version: '3.10'
 
+      # CRITICAL: This ensures Buildozer uses Java 17 instead of Java 11
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
       - name: Install System Dependencies
         run: |
           sudo apt update
-          sudo apt install -y git zip unzip openjdk-17-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev
-          # Stable Cython version for Kivy 2.3.0+
+          sudo apt install -y git zip unzip python3-pip autoconf libtool pkg-config \
+          zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev
           pip3 install --user --upgrade Cython==0.29.33 virtualenv buildozer
 
       - name: Build APK with Buildozer
         run: |
           export PATH=$PATH:~/.local/bin
-          # CRUCIAL: We must clean because the package.domain changed to com.ganesh
+          # Clean old artifacts to avoid package domain conflicts
           buildozer appclean
-          # Accept licenses and start build
+          # Accept licenses and build
           yes | buildozer android debug
         env:
-          # This allows the build to continue even with generic or personal domain names
           BUILDOZER_ALLOW_ORG_NAME_AS_PACKAGE_NAME: 1
-          # Forces the build to only target modern 64-bit phones to save time
-          # This overrides the .spec file just to be safe
-          APP_ANDROID_ARCHS: arm64-v8a
 
-      - name: Upload APK Artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: AI-Vision-App
+          name: vision-assistant-apk
           path: bin/*.apk
