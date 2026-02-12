@@ -1,55 +1,80 @@
 import os
 import time
-import threading
 import numpy as np
+from PIL import Image
 from datetime import datetime
 
 # --- KIVY COMPONENTS ---
 from kivy.app import App
 from kivy.uix.button import Button
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.camera import Camera  
 from kivy.clock import Clock
-from kivy.utils import platform # To check if we are on Android
-from jnius import autoclass
+from kivy.utils import platform
+
+# --- CAMERA4KIVY ---
+from camera4kivy import Preview
+
+# --- ANDROID SPECIFIC ---
+if platform == 'android':
+    from jnius import autoclass
+    from android.permissions import request_permissions, Permission
 
 # --- TFLITE RUNTIME ---
-import tflite_runtime.interpreter as tflite
+try:
+    import tflite_runtime.interpreter as tflite
+except ImportError:
+    import tensorflow.lite as tflite
 
 class VisionApp(App):
     def build(self):
-        # --- NEW: Trigger Permissions on Startup ---
+        # 1. Request Android Permissions
         if platform == 'android':
-            self.request_android_permissions()
+            request_permissions([
+                Permission.CAMERA,
+                Permission.WRITE_EXTERNAL_STORAGE,
+                Permission.READ_EXTERNAL_STORAGE
+            ])
 
-        # Your Settings (Mode 1/2)
+        # GUI Settings (Mode logic preserved)
         self.current_mode = 1 
         self.KNOWN_WIDTHS = {'person': 50, 'chair': 45, 'bottle': 8, 'cell phone': 7}
         self.FOCAL_LENGTH = 715 
-        self.METRIC_THRESHOLD_CM = 91.44
         self.last_speech_time = 0
         self.SPEECH_COOLDOWN = 6 
 
         self.class_names = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
 
         # Setup TTS
-        try:
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
-        except: self.tts = None
+        self.tts = None
+        if platform == 'android':
+            try:
+                PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
+            except: pass
 
-        self.interpreter = tflite.Interpreter(model_path="yolov8n_float32.tflite")
+        # Load TFLite Model
+        model_path = os.path.join(os.path.dirname(__file__), "yolov8n_float32.tflite")
+        self.interpreter = tflite.Interpreter(model_path=model_path)
         self.interpreter.allocate_tensors()
         self.input_details = self.interpreter.get_input_details()
         self.output_details = self.interpreter.get_output_details()
 
+        # GUI Layout
         layout = BoxLayout(orientation='vertical')
-        self.camera = Camera(play=True, resolution=(640, 480))
         
+        # Camera4Kivy Preview widget
+        self.preview = Preview(
+            aspect_ratio='16:9',
+            enable_analyze_pixels=True  # Enables the background analysis loop
+        )
+        # Link the analysis function
+        self.preview.analyze_pixels_callback = self.analyze_frame
+
         self.top_btn = Button(
             text="TAP HERE TO CHANGE MODE\n(Mode 1: Multi-Object Active)",
             background_color=(0.1, 0.5, 0.8, 1),
             font_size='20sp',
+            size_hint_y=0.2,
             halign='center'
         )
         self.top_btn.bind(on_release=self.toggle_mode)
@@ -58,30 +83,21 @@ class VisionApp(App):
             text="TAP HERE TO CLOSE APP",
             background_color=(0.8, 0.2, 0.2, 1),
             font_size='20sp',
+            size_hint_y=0.2,
             halign='center'
         )
         self.bottom_btn.bind(on_release=self.check_close_app)
 
         layout.add_widget(self.top_btn)
+        layout.add_widget(self.preview)
         layout.add_widget(self.bottom_btn)
 
         Clock.schedule_once(lambda dt: self.speak("AI vision Activated. Mode 1 active. Detecting multiple objects. To change mode .Tap on your phone's Top screen . To close the application. tap the bottom screen"), 2)
-        
-        threading.Thread(target=self.ai_engine, daemon=True).start()
         return layout
 
-    # --- NEW: Permission Logic ---
-    def request_android_permissions(self):
-        """
-        Requests Camera and Storage permissions.
-        Android handles the 'one-time' logic: if already granted, nothing happens.
-        """
-        from android.permissions import request_permissions, Permission
-        request_permissions([
-            Permission.CAMERA,
-            Permission.WRITE_EXTERNAL_STORAGE,
-            Permission.READ_EXTERNAL_STORAGE
-        ])
+    def on_start(self):
+        # Start the camera connection
+        self.preview.connect_camera(camera_id='back')
 
     def toggle_mode(self, instance):
         if self.current_mode == 1:
@@ -106,38 +122,52 @@ class VisionApp(App):
         real_w = self.KNOWN_WIDTHS.get(label, 30)
         return (real_w * self.FOCAL_LENGTH) / width_px
 
-    def ai_engine(self):
-        while True:
-            if self.camera.texture:
-                try:
-                    pixels = self.camera.texture.pixels
-                    f_w, f_h = self.camera.texture.size
-                    frame = np.frombuffer(pixels, dtype=np.uint8)
-                    frame = frame.reshape((f_h, f_w, 4))[:, :, :3]
-                    input_data = self.preprocess(frame)
-                    self.interpreter.set_tensor(self.input_details[0]['index'], input_data)
-                    self.interpreter.invoke()
-                    output = self.interpreter.get_tensor(self.output_details[0]['index'])[0]
-                    self.process_results(output, f_w, f_h)
-                except Exception as e:
-                    print(f"AI Engine Error: {e}")
-            time.sleep(0.1)
+    # --- REPLACING AI_ENGINE WITH CAMERA4KIVY CALLBACK ---
+    def analyze_frame(self, pixels, width, height, image_pos, image_size, texture):
+        """ This function runs in a background thread automatically """
+        try:
+            # 1. Convert RGBA bytes to NumPy
+            frame = np.frombuffer(pixels, dtype=np.uint8)
+            frame = frame.reshape((height, width, 4))
+            
+            # 2. Slice to RGB (Remove Alpha)
+            rgb = frame[:, :, :3]
 
-    def preprocess(self, frame):
-        h, w = frame.shape[:2]
-        img = np.array(frame, dtype=np.float32)
-        img = img[::max(1, h//640), ::max(1, w//640)][:640, :640]
-        img = np.pad(img, ((0, max(0, 640-img.shape[0])), (0, max(0, 640-img.shape[1])), (0,0)), mode='constant')
-        img = np.expand_dims(img / 255.0, axis=0).astype(np.float32)
-        return img
+            # 3. Resize using Pillow (Fast & Light)
+            img = Image.fromarray(rgb)
+            img = img.resize((640, 640), Image.BILINEAR)
+            
+            # 4. Prepare for TFLite
+            input_data = np.expand_dims(np.array(img), axis=0).astype(np.float32) / 255.0
+            
+            # Adjust shape if model is [1, 3, 640, 640] instead of [1, 640, 640, 3]
+            if self.input_details[0]['shape'][1] == 3:
+                input_data = np.transpose(input_data, (0, 3, 1, 2))
+
+            # 5. Run Inference
+            self.interpreter.set_tensor(self.input_details[0]['index'], input_data)
+            self.interpreter.invoke()
+            output = self.interpreter.get_tensor(self.output_details[0]['index'])[0]
+            
+            # 6. Process output (YOLOv8 output is [84, 8400])
+            self.process_results(output, width, height)
+            
+        except Exception as e:
+            print(f"Analysis Error: {e}")
 
     def process_results(self, output, f_w, f_h):
+        output = output.transpose() # Becomes [8400, 84]
         processed_boxes = []
+        
         for i in range(8400):
-            scores = output[4:, i]
+            row = output[i]
+            scores = row[4:]
             class_id = np.argmax(scores)
-            if scores[class_id] > 0.4:
-                xc, yc, w, h = output[:4, i]
+            confidence = scores[class_id]
+            
+            if confidence > 0.45:
+                xc, yc, w, h = row[:4]
+                # Scale coordinates to frame size
                 x1 = (xc - w/2) * (f_w / 640)
                 x2 = (xc + w/2) * (f_w / 640)
                 processed_boxes.append({'x1': x1, 'x2': x2, 'label': self.class_names[class_id]})
@@ -146,7 +176,7 @@ class VisionApp(App):
             now = time.time()
             if now - self.last_speech_time > self.SPEECH_COOLDOWN:
                 if self.current_mode == 1:
-                    items = [f"a {b['label']}" for b in processed_boxes[:3]]
+                    items = list(set([b['label'] for b in processed_boxes[:2]]))
                     self.speak("I see " + " and ".join(items))
                 else:
                     box = processed_boxes[0]
