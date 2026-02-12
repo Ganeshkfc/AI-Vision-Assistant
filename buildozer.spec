@@ -8,7 +8,7 @@ source.include_exts = py,png,jpg,kv,atlas,tflite,txt
 version = 0.1
 
 # PINNED: Using hostpython3 and specific Kivy version for stability
-requirements = python3, kivy==2.3.0, hostpython3, numpy, tflite-runtime, camera4kivy, pillow, jnius
+requirements = python3, kivy==2.3.0, hostpython3, numpy, tflite-runtime, camera4kivy, pillow, jnius, sh, gestures4kivy
 
 # PINNED: This version of Cython is the "sweet spot" for Kivy 2.3.0
 android.pip_dependencies = cython==0.29.33
