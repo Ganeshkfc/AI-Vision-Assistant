@@ -3,9 +3,14 @@ on: [push, pull_request]
 
 jobs:
   build:
-    runs-on: ubuntu-22.04  # Stable version for Buildozer
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
       - name: Install System Dependencies
         run: |
@@ -15,15 +20,14 @@ jobs:
 
       - name: Build APK with Buildozer
         run: |
-          # Add local bin to path so 'buildozer' command is found
           export PATH=$PATH:~/.local/bin
-          buildozer android debug
+          # This command accepts licenses and builds the debug APK
+          yes | buildozer android debug
         env:
-          # Automatically accept Android SDK licenses
           BUILDOZER_ALLOW_ORG_NAME_AS_PACKAGE_NAME: 1
 
       - name: Upload Finished APK
         uses: actions/upload-artifact@v4
         with:
-          name: package
+          name: AI-Vision-APK
           path: bin/*.apk
