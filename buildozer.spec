@@ -7,7 +7,7 @@ title = AI Vision Assistant
 package.name = aivisionassistant
 
 # (str) Package domain (needed for android/ios packaging)
-package.domain = org.test
+package.domain = com.ganesh
 
 # (str) Source code where the main.py live
 source.dir = .
@@ -284,7 +284,7 @@ android.permissions = CAMERA, INTERNET, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_ST
 
 # (list) The Android archs to build for, choices: armeabi-v7a, arm64-v8a, x86, x86_64
 # In past, was `android.arch` as we weren't supporting builds for multiple archs at the same time.
-android.archs = arm64-v8a, armeabi-v7a
+android.archs = arm64-v8a
 
 # (int) overrides automatic versionCode computation (used in build.gradle)
 # this is not the same as app version and should only be edited if you know what you're doing
