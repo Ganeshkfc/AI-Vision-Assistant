@@ -2,13 +2,16 @@
 title = AI Vision Assistant
 package.name = aivisionassistant
 package.domain = com.ganesh
-
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas
+source.include_exts = py,png,jpg,kv,atlas,tflite
 
-# Requirements: Cleaned up to avoid conflicts. 
-# Do NOT include python-for-android or pyjnius here.
-requirements = python3, kivy==2.3.0, hostpython3, pillow, requests
+version = 0.1
+
+# PINNED: Using hostpython3 and specific Kivy version for stability
+requirements = python3, kivy==2.3.0, hostpython3, numpy, tflite-runtime, jnius, pillow
+
+# PINNED: This version of Cython is the "sweet spot" for Kivy 2.3.0
+android.pip_dependencies = cython==0.29.33
 
 orientation = portrait
 fullscreen = 0
@@ -18,11 +21,8 @@ android.api = 33
 android.minapi = 21
 android.ndk = 25b
 android.sdk = 33
-
-# Modern Permissions (Replaces old WRITE_EXTERNAL_STORAGE)
-android.permissions = INTERNET, MANAGE_EXTERNAL_STORAGE
-
-# Build architecture
+android.permissions = CAMERA, INTERNET, MANAGE_EXTERNAL_STORAGE
+android.wakelock = True
 android.archs = arm64-v8a
 
 [buildozer]
