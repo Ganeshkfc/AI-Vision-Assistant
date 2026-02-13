@@ -7,6 +7,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    # Increase timeout to 60 minutes for the first build
+    timeout-minutes: 60
 
     steps:
       - name: Checkout Code
@@ -23,14 +25,13 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Cache Buildozer global directory
+      - name: Cache Buildozer
         uses: actions/cache@v4
         with:
           path: ~/.buildozer
-          # Using v4 to ensure a completely fresh start from previous broken attempts
-          key: ${{ runner.os }}-buildozer-v4-${{ hashFiles('buildozer.spec') }}
+          key: ${{ runner.os }}-buildozer-v5-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            ${{ runner.os }}-buildozer-v4-
+            ${{ runner.os }}-buildozer-v5-
 
       - name: Install System Dependencies
         run: |
@@ -38,27 +39,22 @@ jobs:
           sudo apt install -y git zip unzip python3-pip autoconf libtool pkg-config \
           zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev \
           libssl-dev aidl libstdc++6
-          # Force Cython version below 3.0 for Kivy 2.3.0 compatibility
           pip3 install --user --upgrade "Cython<3.0" virtualenv buildozer
 
       - name: Build APK with Buildozer
         run: |
           export PATH=$PATH:~/.local/bin
+          # Explicitly add Android SDK tools to path for sdkmanager
+          export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
+          export PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools
           
-          # 1. Accept Android SDK Licenses
+          # Accept licenses (if the directory exists)
           mkdir -p ~/.android && touch ~/.android/repositories.cfg
-          yes | sdkmanager --licenses || true
-          
-          # 2. SMART CLEAN: Only run clean if the platform directory exists.
-          # This prevents the FileNotFoundError that crashed your last build.
-          if [ -d ".buildozer/android/platform" ]; then
-            echo "Directory found. Cleaning existing Android platform..."
-            buildozer android clean
-          else
-            echo "Platform directory not found. Skipping clean to avoid crash."
+          if [ -d "$ANDROID_SDK_ROOT" ]; then
+            yes | sdkmanager --licenses || true
           fi
           
-          # 3. BUILD: Run the main build command with verbose logging
+          # Build
           yes | buildozer -v android debug
         env:
           BUILDOZER_ALLOW_ORG_NAME_AS_PACKAGE_NAME: 1
