@@ -28,7 +28,6 @@ jobs:
       - name: Install System Dependencies
         run: |
           sudo apt update
-          # Added essential headers for compiling host-python without syntax errors
           sudo apt install -y git zip unzip python3-pip autoconf libtool pkg-config \
           zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev \
           libssl-dev aidl libstdc++6 liblzma-dev libgdbm-dev libsqlite3-dev \
@@ -39,7 +38,7 @@ jobs:
         run: |
           export PATH=$PATH:~/.local/bin
           
-          # 1. CLEAN: Remove any corrupted files from previous attempts
+          # 1. CLEAN START: Remove previous build artifacts
           rm -rf .buildozer/
           rm -rf ~/.buildozer/
           
@@ -60,10 +59,10 @@ jobs:
           mkdir -p $ANDROID_SDK_DIR/tools/bin
           ln -s $ANDROID_SDK_DIR/cmdline-tools/latest/bin/sdkmanager $ANDROID_SDK_DIR/tools/bin/sdkmanager
           
-          # 3. Accept Licenses
-          yes | $ANDROID_SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_DIR --licenses
+          # 3. FORCE LICENSE ACCEPTANCE: Bypasses the "7 of 7 licenses" prompt
+          yes | $ANDROID_SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_DIR --licenses || true
           
-          # 4. Final Build: The -v flag is critical for seeing detailed logs
+          # 4. FINAL BUILD
           buildozer -v android debug
         env:
           BUILDOZER_ALLOW_ORG_NAME_AS_PACKAGE_NAME: 1
