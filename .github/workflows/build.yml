@@ -37,20 +37,18 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.buildozer
-          # Bumped to v8 to ensure we rebuild Python with lzma support
-          key: ${{ runner.os }}-buildozer-v8-${{ hashFiles('buildozer.spec') }}
+          # IMPORTANT: We use a unique key to allow for clean builds when needed
+          key: ${{ runner.os }}-buildozer-v9-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            ${{ runner.os }}-buildozer-v8-
+            ${{ runner.os }}-buildozer-v9-
 
       - name: Install System Dependencies
         run: |
           sudo apt update
-          # Added liblzma-dev and libgdbm-dev to fix missing header errors
           sudo apt install -y git zip unzip python3-pip autoconf libtool pkg-config \
           zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev \
           libssl-dev aidl libstdc++6 liblzma-dev libgdbm-dev
           
-          # Force setuptools version to avoid the 'Context' error
           pip3 install --user --upgrade "Cython<3.0" "setuptools<70" virtualenv buildozer
 
       - name: Build APK with Buildozer
@@ -65,7 +63,11 @@ jobs:
             yes | sdkmanager --licenses || true
           fi
           
-          # 2. BUILD
+          # 2. CLEAN & BUILD
+          # Added 'clean' to remove failed artifacts from previous runs
+          buildozer android clean
+          
+          # Use --arch arm64-v8a as specified in your previous logs
           yes | buildozer -v android debug --arch arm64-v8a
         env:
           BUILDOZER_ALLOW_ORG_NAME_AS_PACKAGE_NAME: 1
