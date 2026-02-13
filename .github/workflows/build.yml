@@ -8,6 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    # IMPORTANT: Keep this! First builds are very long.
     timeout-minutes: 120
 
     steps:
@@ -45,13 +46,27 @@ jobs:
         run: |
           export PATH=$PATH:~/.local/bin
           
-          # Fix for the "Stuck at License" error:
-          # This creates the license files that the Android SDK expects.
-          mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
-          echo -e "8933bad161af4178b1185d1a37fbf41ea5269c55\nd56f5187479451e05573651390365f13070f01a1\n24333f8a63b6825ea4c551402c46a4e1716311d0" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+          # PRO FIX: Manually setting up the SDK structure to avoid "sdkmanager not found"
+          ANDROID_SDK_DIR=$HOME/.buildozer/android/platform/android-sdk
+          mkdir -p $ANDROID_SDK_DIR/cmdline-tools
           
-          # Start the build with 'yes' to handle any other unexpected prompts
-          yes | buildozer -v android debug
+          # Download official command-line tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
+          unzip -q cmdline-tools.zip
+          
+          # Organize into the 'latest' directory structure
+          mkdir -p $ANDROID_SDK_DIR/cmdline-tools/latest
+          mv cmdline-tools/* $ANDROID_SDK_DIR/cmdline-tools/latest/
+          
+          # Create the link Buildozer expects
+          mkdir -p $ANDROID_SDK_DIR/tools/bin
+          ln -s $ANDROID_SDK_DIR/cmdline-tools/latest/bin/sdkmanager $ANDROID_SDK_DIR/tools/bin/sdkmanager
+          
+          # Pre-accept all licenses so the build never stops to ask "y/n"
+          yes | $ANDROID_SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_DIR --licenses
+          
+          # Final Build Command
+          buildozer -v android debug
         env:
           BUILDOZER_ALLOW_ORG_NAME_AS_PACKAGE_NAME: 1
 
