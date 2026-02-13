@@ -37,10 +37,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.buildozer
-          # IMPORTANT: We use a unique key to allow for clean builds when needed
-          key: ${{ runner.os }}-buildozer-v9-${{ hashFiles('buildozer.spec') }}
+          # Updated to v10 to force a clean environment after the repeated errors
+          key: ${{ runner.os }}-buildozer-v10-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            ${{ runner.os }}-buildozer-v9-
+            ${{ runner.os }}-buildozer-v10-
 
       - name: Install System Dependencies
         run: |
@@ -54,21 +54,12 @@ jobs:
       - name: Build APK with Buildozer
         run: |
           export PATH=$PATH:~/.local/bin
-          export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
-          export PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools
-          
-          # 1. Accept Licenses
-          mkdir -p ~/.android && touch ~/.android/repositories.cfg
-          if [ -d "$ANDROID_SDK_ROOT" ]; then
-            yes | sdkmanager --licenses || true
-          fi
-          
-          # 2. CLEAN & BUILD
-          # Added 'clean' to remove failed artifacts from previous runs
+          # 1. Clean previous failed state
           buildozer android clean
           
-          # Use --arch arm64-v8a as specified in your previous logs
-          yes | buildozer -v android debug --arch arm64-v8a
+          # 2. Start the build
+          # We don't need --arch here because it is defined inside your buildozer.spec
+          yes | buildozer -v android debug
         env:
           BUILDOZER_ALLOW_ORG_NAME_AS_PACKAGE_NAME: 1
 
