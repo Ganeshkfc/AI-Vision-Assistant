@@ -7,7 +7,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    # Increase timeout to 2 hours for the heavy Kivy/Python compilation
+    # Keep timeout high just in case
     timeout-minutes: 120
 
     steps:
@@ -29,10 +29,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.buildozer
-          # Bumped to v6 to ensure we aren't using any partially corrupted files
-          key: ${{ runner.os }}-buildozer-v6-${{ hashFiles('buildozer.spec') }}
+          # Bumped key to v7 to ensure we use the new setuptools version
+          key: ${{ runner.os }}-buildozer-v7-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            ${{ runner.os }}-buildozer-v6-
+            ${{ runner.os }}-buildozer-v7-
 
       - name: Install System Dependencies
         run: |
@@ -40,7 +40,9 @@ jobs:
           sudo apt install -y git zip unzip python3-pip autoconf libtool pkg-config \
           zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev \
           libssl-dev aidl libstdc++6
-          pip3 install --user --upgrade "Cython<3.0" virtualenv buildozer
+          
+          # THE FIX: Force setuptools to be older than v70 to prevent the 'Context' error
+          pip3 install --user --upgrade "Cython<3.0" "setuptools<70" virtualenv buildozer
 
       - name: Build APK with Buildozer
         run: |
@@ -48,14 +50,13 @@ jobs:
           export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
           export PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools
           
-          # 1. Accept Licenses
+          # 1. Accept Licenses (Standard safety check)
           mkdir -p ~/.android && touch ~/.android/repositories.cfg
           if [ -d "$ANDROID_SDK_ROOT" ]; then
             yes | sdkmanager --licenses || true
           fi
           
-          # 2. THE FIX: Build for ONLY one architecture to save 50% of the time.
-          # This forces the build to finish within the 120-minute window.
+          # 2. BUILD: Single arch to keep it fast
           yes | buildozer -v android debug --arch arm64-v8a
         env:
           BUILDOZER_ALLOW_ORG_NAME_AS_PACKAGE_NAME: 1
