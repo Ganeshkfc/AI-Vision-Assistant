@@ -4,13 +4,15 @@ title = AI Vision Assistant
 package.name = aivisionassistant
 package.domain = com.ganesh
 source.dir = .
+# Optimized inclusions for vision apps
 source.include_exts = py,png,jpg,kv,atlas,tflite,txt
+# EXCLUSION FIX: Prevents the build from stalling during bytecode compilation
+android.exclude_src = bin/*, .google*, tests/*, **/test/*, **/tests/*, **/idle_test/*
 version = 0.1
 orientation = portrait
 fullscreen = 0
 
 # (Section 2: Requirements)
-# Pinned versions for stability with NDK 25b
 requirements = python3,kivy,camera4kivy,gestures4kivy,pillow,jnius,numpy,tflite-runtime,sh,android,requests
 
 # (Section 3: Android / P4A Specifics)
@@ -22,18 +24,15 @@ android.pip_dependencies = cython==0.29.33
 android.api = 33
 android.minapi = 24
 android.ndk = 25b
-android.sdk = 33
-# Forces the NDK to use headers compatible with Python 3.10
 android.ndk_api = 24
 android.accept_sdk_license = True
 
 # (Section 5: Permissions & Hardware)
-android.permissions = CAMERA, INTERNET, READ_MEDIA_IMAGES, READ_MEDIA_VIDEO, WAKE_LOCK
+android.permissions = CAMERA, INTERNET, READ_MEDIA_IMAGES, READ_MEDIA_VIDEO, WAKE_LOCK, WRITE_EXTERNAL_STORAGE
 android.wakelock = True
 android.archs = arm64-v8a
 
 # (Section 6: CRITICAL COMPILER FIX)
-# This prevents the 'endgrent' error from stopping the build
 android.extra_cflags = "-Wno-error=implicit-function-declaration -Wno-implicit-function-declaration"
 
 [buildozer]
