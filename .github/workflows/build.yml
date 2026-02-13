@@ -2,7 +2,7 @@ name: Build AI Vision Assistant
 on:
   push:
     branches: [ main ]
-  workflow_dispatch: # Allows you to trigger the build manually from the "Actions" tab
+  workflow_dispatch:
 
 jobs:
   build:
@@ -23,7 +23,6 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # --- NEW: Caching for Android SDK/NDK and Buildozer global files ---
       - name: Cache Buildozer global directory
         uses: actions/cache@v4
         with:
@@ -35,17 +34,23 @@ jobs:
       - name: Install System Dependencies
         run: |
           sudo apt update
+          # Added aidl and libstdc++6 to solve the "Aidl not found" error
           sudo apt install -y git zip unzip python3-pip autoconf libtool pkg-config \
-          zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev
+          zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev \
+          libssl-dev aidl libstdc++6
           pip3 install --user --upgrade Cython==0.29.33 virtualenv buildozer
 
       - name: Build APK with Buildozer
         run: |
           export PATH=$PATH:~/.local/bin
-          # 1. CLEAN: Wipes only the previous app build artifacts (fast)
+          
+          # FIX: Automatically accept all Android SDK licenses
+          mkdir -p ~/.android && touch ~/.android/repositories.cfg
+          yes | sdkmanager --licenses || true
+          
           buildozer appclean
-          # 2. DEBUG: The actual build command. -v provides detailed output if it fails
-          buildozer -v android debug
+          # Using "yes |" here as a second layer of safety for the build process
+          yes | buildozer -v android debug
         env:
           BUILDOZER_ALLOW_ORG_NAME_AS_PACKAGE_NAME: 1
 
