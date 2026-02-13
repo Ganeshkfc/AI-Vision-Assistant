@@ -26,8 +26,11 @@ android.minapi = 21
 android.ndk = 25b
 android.sdk = 33
 
-# Updated permissions for Android 13+
-# Note: MANAGE_EXTERNAL_STORAGE is very restrictive; usually CAMERA + MEDIA is enough.
+# CRITICAL FIX: Automatically accept SDK licenses to prevent "Aidl not found" error
+android.accept_sdk_license = True
+
+# Updated permissions for Android 13+ (API 33)
+# Note: WRITE_EXTERNAL_STORAGE is ignored on API 33; we use READ_MEDIA instead.
 android.permissions = CAMERA, INTERNET, READ_MEDIA_IMAGES, READ_MEDIA_VIDEO, WAKE_LOCK
 
 android.wakelock = True
