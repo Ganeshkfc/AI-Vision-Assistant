@@ -7,10 +7,18 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    # Keep timeout high just in case
     timeout-minutes: 120
 
     steps:
+      - name: Free Disk Space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo apt-get clean
+          df -h
+
       - name: Checkout Code
         uses: actions/checkout@v4
 
@@ -29,19 +37,20 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.buildozer
-          # Bumped key to v7 to ensure we use the new setuptools version
-          key: ${{ runner.os }}-buildozer-v7-${{ hashFiles('buildozer.spec') }}
+          # Bumped to v8 to ensure we rebuild Python with lzma support
+          key: ${{ runner.os }}-buildozer-v8-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            ${{ runner.os }}-buildozer-v7-
+            ${{ runner.os }}-buildozer-v8-
 
       - name: Install System Dependencies
         run: |
           sudo apt update
+          # Added liblzma-dev and libgdbm-dev to fix missing header errors
           sudo apt install -y git zip unzip python3-pip autoconf libtool pkg-config \
           zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev \
-          libssl-dev aidl libstdc++6
+          libssl-dev aidl libstdc++6 liblzma-dev libgdbm-dev
           
-          # THE FIX: Force setuptools to be older than v70 to prevent the 'Context' error
+          # Force setuptools version to avoid the 'Context' error
           pip3 install --user --upgrade "Cython<3.0" "setuptools<70" virtualenv buildozer
 
       - name: Build APK with Buildozer
@@ -50,13 +59,13 @@ jobs:
           export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
           export PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools
           
-          # 1. Accept Licenses (Standard safety check)
+          # 1. Accept Licenses
           mkdir -p ~/.android && touch ~/.android/repositories.cfg
           if [ -d "$ANDROID_SDK_ROOT" ]; then
             yes | sdkmanager --licenses || true
           fi
           
-          # 2. BUILD: Single arch to keep it fast
+          # 2. BUILD
           yes | buildozer -v android debug --arch arm64-v8a
         env:
           BUILDOZER_ALLOW_ORG_NAME_AS_PACKAGE_NAME: 1
