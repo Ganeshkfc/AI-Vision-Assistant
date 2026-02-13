@@ -27,14 +27,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.buildozer
-          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
+          # Using a specific key for the deep clean to ensure we don't pull old errors
+          key: ${{ runner.os }}-buildozer-v2-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            ${{ runner.os }}-buildozer-
+            ${{ runner.os }}-buildozer-v2-
 
       - name: Install System Dependencies
         run: |
           sudo apt update
-          # Added aidl and libstdc++6 to solve the "Aidl not found" error
           sudo apt install -y git zip unzip python3-pip autoconf libtool pkg-config \
           zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev \
           libssl-dev aidl libstdc++6
@@ -44,12 +44,15 @@ jobs:
         run: |
           export PATH=$PATH:~/.local/bin
           
-          # FIX: Automatically accept all Android SDK licenses
+          # 1. Accept Android SDK Licenses
           mkdir -p ~/.android && touch ~/.android/repositories.cfg
           yes | sdkmanager --licenses || true
           
-          buildozer appclean
-          # Using "yes |" here as a second layer of safety for the build process
+          # 2. DEEP CLEAN: This solves the "clang: no input files" error 
+          # by wiping the old, broken compiled distribution.
+          buildozer android clean
+          
+          # 3. BUILD: Run the main build
           yes | buildozer -v android debug
         env:
           BUILDOZER_ALLOW_ORG_NAME_AS_PACKAGE_NAME: 1
