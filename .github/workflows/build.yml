@@ -27,10 +27,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.buildozer
-          # Bumped to v3 to force GitHub to ignore the previous broken 'clang' files
-          key: ${{ runner.os }}-buildozer-v3-${{ hashFiles('buildozer.spec') }}
+          # Using v4 to ensure a completely fresh start from previous broken attempts
+          key: ${{ runner.os }}-buildozer-v4-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            ${{ runner.os }}-buildozer-v3-
+            ${{ runner.os }}-buildozer-v4-
 
       - name: Install System Dependencies
         run: |
@@ -38,7 +38,7 @@ jobs:
           sudo apt install -y git zip unzip python3-pip autoconf libtool pkg-config \
           zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev \
           libssl-dev aidl libstdc++6
-          # Force Cython version for Kivy compatibility
+          # Force Cython version below 3.0 for Kivy 2.3.0 compatibility
           pip3 install --user --upgrade "Cython<3.0" virtualenv buildozer
 
       - name: Build APK with Buildozer
@@ -49,10 +49,16 @@ jobs:
           mkdir -p ~/.android && touch ~/.android/repositories.cfg
           yes | sdkmanager --licenses || true
           
-          # 2. THE FIX: Wipe the broken distribution so clang has fresh input files
-          buildozer android clean
+          # 2. SMART CLEAN: Only run clean if the platform directory exists.
+          # This prevents the FileNotFoundError that crashed your last build.
+          if [ -d ".buildozer/android/platform" ]; then
+            echo "Directory found. Cleaning existing Android platform..."
+            buildozer android clean
+          else
+            echo "Platform directory not found. Skipping clean to avoid crash."
+          fi
           
-          # 3. BUILD: Run with verbose logging to catch any remaining issues
+          # 3. BUILD: Run the main build command with verbose logging
           yes | buildozer -v android debug
         env:
           BUILDOZER_ALLOW_ORG_NAME_AS_PACKAGE_NAME: 1
