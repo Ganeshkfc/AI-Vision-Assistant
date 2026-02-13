@@ -1,3 +1,5 @@
+__version__ = "1.0"  # Added version for Buildozer compatibility
+
 import os
 import time
 import numpy as np
@@ -34,13 +36,15 @@ class VisionApp(App):
         self.SPEECH_COOLDOWN = 6 
         self.class_names = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
 
-        # Setup TTS (Preserved)
+        # Setup TTS (Preserved with safety wrapper)
         self.tts = None
         if platform == 'android':
             try:
                 PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                Context = autoclass('android.content.Context')
                 self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
-            except: pass
+            except Exception as e:
+                print(f"TTS Initialization Error: {e}")
 
         # Load TFLite Model with Safety Check
         model_path = os.path.join(os.path.dirname(__file__), "yolov8n_float32.tflite")
@@ -115,8 +119,11 @@ class VisionApp(App):
 
     def speak(self, text):
         if self.tts:
-            self.tts.setSpeechRate(0.8) 
-            self.tts.speak(text, 0, None) 
+            try:
+                self.tts.setSpeechRate(0.8) 
+                self.tts.speak(text, 0, None)
+            except:
+                pass
 
     def get_distance_cm(self, label, width_px):
         real_w = self.KNOWN_WIDTHS.get(label, 30)
