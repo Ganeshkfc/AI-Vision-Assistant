@@ -11,7 +11,7 @@ fullscreen = 0
 
 # (Section 2: Requirements)
 # Pinned versions for stability with NDK 25b
-requirements = python3==3.10.12, kivy==2.3.0, hostpython3, numpy, tflite-runtime, camera4kivy, pillow, jnius, sh, gestures4kivy
+requirements = python3,kivy,camera4kivy,gestures4kivy,pillow,jnius,numpy,tflite-runtime,sh,android,requests
 
 # (Section 3: Android / P4A Specifics)
 p4a.branch = master
