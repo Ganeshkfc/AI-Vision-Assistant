@@ -1,4 +1,4 @@
-__version__ = "1.0"  # Added version for Buildozer compatibility
+__version__ = "1.0"
 
 import os
 import time
@@ -24,11 +24,13 @@ if platform == 'android':
 try:
     import tflite_runtime.interpreter as tflite
 except ImportError:
-    import tensorflow.lite as tflite
+    try:
+        import tensorflow.lite as tflite
+    except ImportError:
+        print("TFLite not found")
 
 class VisionApp(App):
     def build(self):
-        # GUI Settings (Preserved exactly)
         self.current_mode = 1 
         self.KNOWN_WIDTHS = {'person': 50, 'chair': 45, 'bottle': 8, 'cell phone': 7}
         self.FOCAL_LENGTH = 715 
@@ -36,18 +38,19 @@ class VisionApp(App):
         self.SPEECH_COOLDOWN = 6 
         self.class_names = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
 
-        # Setup TTS (Preserved with safety wrapper)
         self.tts = None
         if platform == 'android':
             try:
-                PythonActivity = autoclass('org.kivy.android.PythonActivity')
-                Context = autoclass('android.content.Context')
+                # Standard Renpy/Kivy Bootstrap path
+                PythonActivity = autoclass('org.renpy.android.PythonActivity')
                 self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
             except Exception as e:
                 print(f"TTS Initialization Error: {e}")
 
-        # Load TFLite Model with Safety Check
-        model_path = os.path.join(os.path.dirname(__file__), "yolov8n_float32.tflite")
+        # Path Fix for Android
+        cur_dir = os.path.dirname(os.path.abspath(__file__))
+        model_path = os.path.join(cur_dir, "yolov8n_float32.tflite")
+        
         if os.path.exists(model_path):
             self.interpreter = tflite.Interpreter(model_path=model_path)
             self.interpreter.allocate_tensors()
@@ -56,7 +59,6 @@ class VisionApp(App):
         else:
             print(f"CRITICAL: Model file not found at {model_path}")
 
-        # GUI Layout (Preserved exactly)
         layout = BoxLayout(orientation='vertical')
         self.preview = Preview(aspect_ratio='16:9', enable_analyze_pixels=True)
         self.preview.analyze_pixels_callback = self.analyze_frame
@@ -80,27 +82,25 @@ class VisionApp(App):
         return layout
 
     def on_start(self):
-        # 1. Request Permissions after app is already visible
         if platform == 'android':
             request_permissions([
                 Permission.CAMERA,
-                Permission.READ_MEDIA_IMAGES,
-                Permission.READ_MEDIA_VIDEO
+                Permission.READ_EXTERNAL_STORAGE,
+                Permission.WRITE_EXTERNAL_STORAGE
             ], self.on_permission_result)
         else:
             self.start_camera()
 
     def on_permission_result(self, permissions, grants):
-        # 2. Only start camera if permission was granted
         if all(grants):
             self.start_camera()
         else:
-            self.speak("Camera permission required to run.")
+            self.speak("Camera permission required.")
 
     def start_camera(self):
-        # 3. Connect camera with a tiny delay to prevent startup crash
-        Clock.schedule_once(lambda dt: self.preview.connect_camera(camera_id='back'), 0.2)
-        Clock.schedule_once(lambda dt: self.speak("AI vision Activated. Mode 1 active.Detecting multiple objects. To change mode .Tap on your phone's Top screen . To close the application. tap the bottom screen"), 1)
+        Clock.schedule_once(lambda dt: self.preview.connect_camera(camera_id='back'), 0.5)
+        # Speech delayed slightly to ensure TTS is ready
+        Clock.schedule_once(lambda dt: self.speak("AI vision Activated. Mode 1 active. Detecting multiple objects. Tap your phone's top screen to change mode. tap on the bottom screen to close the application."), 1.5)
 
     def toggle_mode(self, instance):
         if self.current_mode == 1:
@@ -113,21 +113,21 @@ class VisionApp(App):
             self.top_btn.text = "MODE 1 ACTIVE\n(Multiple Objects)"
 
     def check_close_app(self, instance):
-        self.speak("Closing application. Thank you.")
+        self.speak("Closing application.")
         self.preview.disconnect_camera()
         Clock.schedule_once(lambda dt: self.stop(), 0.5)
 
     def speak(self, text):
         if self.tts:
             try:
-                self.tts.setSpeechRate(0.8) 
+                self.tts.setSpeechRate(0.9) 
                 self.tts.speak(text, 0, None)
             except:
                 pass
 
     def get_distance_cm(self, label, width_px):
         real_w = self.KNOWN_WIDTHS.get(label, 30)
-        return (real_w * self.FOCAL_LENGTH) / width_px
+        return (real_w * self.FOCAL_LENGTH) / max(width_px, 1)
 
     def analyze_frame(self, pixels, width, height, image_pos, image_size, texture):
         try:
@@ -142,12 +142,12 @@ class VisionApp(App):
             output = self.interpreter.get_tensor(self.output_details[0]['index'])[0]
             self.process_results(output, width, height)
         except Exception as e:
-            print(f"AI Error: {e}")
+            pass
 
     def process_results(self, output, f_w, f_h):
         output = output.transpose() 
         processed_boxes = []
-        for i in range(8400):
+        for i in range(output.shape[0]):
             row = output[i]
             scores = row[4:]
             class_id = np.argmax(scores)
