@@ -27,7 +27,7 @@ except ImportError:
 
 class VisionApp(App):
     def build(self):
-        # 1. Request Android Permissions
+        # 1. Request Android Permissions immediately
         if platform == 'android':
             request_permissions([
                 Permission.CAMERA,
@@ -52,7 +52,7 @@ class VisionApp(App):
                 self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
             except: pass
 
-        # Load TFLite Model
+        # Load TFLite Model (Logic moved to build but interpreter created here)
         model_path = os.path.join(os.path.dirname(__file__), "yolov8n_float32.tflite")
         self.interpreter = tflite.Interpreter(model_path=model_path)
         self.interpreter.allocate_tensors()
@@ -65,9 +65,8 @@ class VisionApp(App):
         # Camera4Kivy Preview widget
         self.preview = Preview(
             aspect_ratio='16:9',
-            enable_analyze_pixels=True  # Enables the background analysis loop
+            enable_analyze_pixels=True
         )
-        # Link the analysis function
         self.preview.analyze_pixels_callback = self.analyze_frame
 
         self.top_btn = Button(
@@ -96,8 +95,14 @@ class VisionApp(App):
         return layout
 
     def on_start(self):
-        # Start the camera connection
-        self.preview.connect_camera(camera_id='back')
+        # 2. FIX: Wait 0.5 seconds before connecting camera to allow UI to settle
+        Clock.schedule_once(self.connect_camera_delayed, 0.5)
+
+    def connect_camera_delayed(self, dt):
+        try:
+            self.preview.connect_camera(camera_id='back')
+        except Exception as e:
+            print(f"Camera Connection Error: {e}")
 
     def toggle_mode(self, instance):
         if self.current_mode == 1:
@@ -111,7 +116,9 @@ class VisionApp(App):
 
     def check_close_app(self, instance):
         self.speak("Closing application. Thank you.")
-        Clock.schedule_once(lambda dt: self.stop(), 1)
+        # Disconnect camera before stopping to prevent hang
+        self.preview.disconnect_camera()
+        Clock.schedule_once(lambda dt: self.stop(), 0.5)
 
     def speak(self, text):
         if self.tts:
@@ -122,52 +129,35 @@ class VisionApp(App):
         real_w = self.KNOWN_WIDTHS.get(label, 30)
         return (real_w * self.FOCAL_LENGTH) / width_px
 
-    # --- REPLACING AI_ENGINE WITH CAMERA4KIVY CALLBACK ---
     def analyze_frame(self, pixels, width, height, image_pos, image_size, texture):
-        """ This function runs in a background thread automatically """
         try:
-            # 1. Convert RGBA bytes to NumPy
             frame = np.frombuffer(pixels, dtype=np.uint8)
             frame = frame.reshape((height, width, 4))
-            
-            # 2. Slice to RGB (Remove Alpha)
             rgb = frame[:, :, :3]
-
-            # 3. Resize using Pillow (Fast & Light)
             img = Image.fromarray(rgb)
             img = img.resize((640, 640), Image.BILINEAR)
-            
-            # 4. Prepare for TFLite
             input_data = np.expand_dims(np.array(img), axis=0).astype(np.float32) / 255.0
             
-            # Adjust shape if model is [1, 3, 640, 640] instead of [1, 640, 640, 3]
             if self.input_details[0]['shape'][1] == 3:
                 input_data = np.transpose(input_data, (0, 3, 1, 2))
 
-            # 5. Run Inference
             self.interpreter.set_tensor(self.input_details[0]['index'], input_data)
             self.interpreter.invoke()
             output = self.interpreter.get_tensor(self.output_details[0]['index'])[0]
-            
-            # 6. Process output (YOLOv8 output is [84, 8400])
             self.process_results(output, width, height)
-            
         except Exception as e:
             print(f"Analysis Error: {e}")
 
     def process_results(self, output, f_w, f_h):
-        output = output.transpose() # Becomes [8400, 84]
+        output = output.transpose() 
         processed_boxes = []
-        
         for i in range(8400):
             row = output[i]
             scores = row[4:]
             class_id = np.argmax(scores)
             confidence = scores[class_id]
-            
             if confidence > 0.45:
                 xc, yc, w, h = row[:4]
-                # Scale coordinates to frame size
                 x1 = (xc - w/2) * (f_w / 640)
                 x2 = (xc + w/2) * (f_w / 640)
                 processed_boxes.append({'x1': x1, 'x2': x2, 'label': self.class_names[class_id]})
