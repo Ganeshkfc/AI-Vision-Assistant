@@ -7,21 +7,29 @@ source.include_exts = py,png,jpg,kv,atlas,tflite,txt
 
 version = 0.1
 
-# PINNED: Using hostpython3 and specific Kivy version for stability
+# PINNED: Requirements for Camera4Kivy and TFLite
 requirements = python3, kivy==2.3.0, hostpython3, numpy, tflite-runtime, camera4kivy, pillow, jnius, sh, gestures4kivy
 
-# PINNED: This version of Cython is the "sweet spot" for Kivy 2.3.0
+# MANDATORY for Camera4Kivy to work on Android
+p4a.branch = master
+p4a.hook = camera4kivy
+
+# PINNED: Stable Cython for Kivy 2.3.0
 android.pip_dependencies = cython==0.29.33
 
 orientation = portrait
 fullscreen = 0
 
-# Android specific
+# Android specific (Targeting API 33/Android 13)
 android.api = 33
 android.minapi = 21
 android.ndk = 25b
 android.sdk = 33
-android.permissions = CAMERA, INTERNET, MANAGE_EXTERNAL_STORAGE
+
+# Updated permissions for Android 13+
+# Note: MANAGE_EXTERNAL_STORAGE is very restrictive; usually CAMERA + MEDIA is enough.
+android.permissions = CAMERA, INTERNET, READ_MEDIA_IMAGES, READ_MEDIA_VIDEO, WAKE_LOCK
+
 android.wakelock = True
 android.archs = arm64-v8a
 
