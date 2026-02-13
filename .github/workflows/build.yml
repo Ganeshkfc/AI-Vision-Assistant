@@ -19,7 +19,16 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libffi-dev libssl-dev ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly
+          # FIX: Handles the 'exit code 100' dependency conflict
+          sudo apt-get remove -y libunwind-14-dev || true
+          sudo apt-get install -y libunwind-dev
+          
+          sudo apt-get install -y build-essential libffi-dev libssl-dev ffmpeg \
+            libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
+            libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev \
+            zlib1g-dev libgstreamer1.0-dev gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly
+          
           pip install --upgrade pip
           pip install buildozer cython
 
@@ -33,25 +42,30 @@ jobs:
         run: |
           export PATH=$PATH:~/.local/bin
           
+          # RESTORED: Incremental Build Logic
+          # We only clean if specifically needed; otherwise, Buildozer reuses the platform
+          if [ -d ".buildozer/android/platform/python-for-android" ]; then
+            echo "Existing build detected. Running incremental update..."
+          fi
+
           # Fix Environment Conflicts
           unset ANDROID_NDK_HOME
           unset ANDROID_NDK_ROOT
           unset ANDROID_SDK_ROOT
           
-          # Setup SDK Structure for Buildozer
+          # Setup SDK Structure (Only if missing)
           ANDROID_SDK_DIR=$HOME/.buildozer/android/platform/android-sdk
-          mkdir -p $ANDROID_SDK_DIR/cmdline-tools
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O tools.zip
-          unzip -q tools.zip
-          mkdir -p $ANDROID_SDK_DIR/cmdline-tools/latest
-          mv cmdline-tools/* $ANDROID_SDK_DIR/cmdline-tools/latest/
-          
-          # Link for Compatibility
-          mkdir -p $ANDROID_SDK_DIR/tools/bin
-          ln -s $ANDROID_SDK_DIR/cmdline-tools/latest/bin/sdkmanager $ANDROID_SDK_DIR/tools/bin/sdkmanager
-          
-          # Force License Acceptance
-          yes | $ANDROID_SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_DIR --licenses || true
+          if [ ! -d "$ANDROID_SDK_DIR/cmdline-tools" ]; then
+            mkdir -p $ANDROID_SDK_DIR/cmdline-tools
+            wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O tools.zip
+            unzip -q tools.zip
+            mkdir -p $ANDROID_SDK_DIR/cmdline-tools/latest
+            mv cmdline-tools/* $ANDROID_SDK_DIR/cmdline-tools/latest/
+            
+            mkdir -p $ANDROID_SDK_DIR/tools/bin
+            ln -s $ANDROID_SDK_DIR/cmdline-tools/latest/bin/sdkmanager $ANDROID_SDK_DIR/tools/bin/sdkmanager
+            yes | $ANDROID_SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_DIR --licenses || true
+          fi
           
           # Run the build
           buildozer -v android debug
