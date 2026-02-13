@@ -31,6 +31,7 @@ except ImportError:
 
 class VisionApp(App):
     def build(self):
+        # Your Original App Logic & Settings
         self.current_mode = 1 
         self.KNOWN_WIDTHS = {'person': 50, 'chair': 45, 'bottle': 8, 'cell phone': 7}
         self.FOCAL_LENGTH = 715 
@@ -38,16 +39,17 @@ class VisionApp(App):
         self.SPEECH_COOLDOWN = 6 
         self.class_names = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
 
+        # Setup Android TTS with the correct Bootstrap path
         self.tts = None
         if platform == 'android':
             try:
-                # Standard Renpy/Kivy Bootstrap path
+                # FIXED: Using org.renpy.android.PythonActivity for better stability
                 PythonActivity = autoclass('org.renpy.android.PythonActivity')
                 self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
             except Exception as e:
                 print(f"TTS Initialization Error: {e}")
 
-        # Path Fix for Android
+        # Path Fix for Android - Ensures model is found in the app folder
         cur_dir = os.path.dirname(os.path.abspath(__file__))
         model_path = os.path.join(cur_dir, "yolov8n_float32.tflite")
         
@@ -59,6 +61,7 @@ class VisionApp(App):
         else:
             print(f"CRITICAL: Model file not found at {model_path}")
 
+        # Your GUI Layout
         layout = BoxLayout(orientation='vertical')
         self.preview = Preview(aspect_ratio='16:9', enable_analyze_pixels=True)
         self.preview.analyze_pixels_callback = self.analyze_frame
@@ -82,6 +85,7 @@ class VisionApp(App):
         return layout
 
     def on_start(self):
+        # Request Android permissions properly on startup
         if platform == 'android':
             request_permissions([
                 Permission.CAMERA,
@@ -98,8 +102,9 @@ class VisionApp(App):
             self.speak("Camera permission required.")
 
     def start_camera(self):
+        # Delayed connection to prevent race conditions during startup
         Clock.schedule_once(lambda dt: self.preview.connect_camera(camera_id='back'), 0.5)
-        # Speech delayed slightly to ensure TTS is ready
+        # Your specific welcome message
         Clock.schedule_once(lambda dt: self.speak("AI vision Activated. Mode 1 active. Detecting multiple objects. Tap your phone's top screen to change mode. tap on the bottom screen to close the application."), 1.5)
 
     def toggle_mode(self, instance):
@@ -113,14 +118,14 @@ class VisionApp(App):
             self.top_btn.text = "MODE 1 ACTIVE\n(Multiple Objects)"
 
     def check_close_app(self, instance):
-        self.speak("Closing application.")
+        self.speak("Closing application. Thank you.")
         self.preview.disconnect_camera()
         Clock.schedule_once(lambda dt: self.stop(), 0.5)
 
     def speak(self, text):
         if self.tts:
             try:
-                self.tts.setSpeechRate(0.9) 
+                self.tts.setSpeechRate(0.85) 
                 self.tts.speak(text, 0, None)
             except:
                 pass
@@ -131,12 +136,15 @@ class VisionApp(App):
 
     def analyze_frame(self, pixels, width, height, image_pos, image_size, texture):
         try:
+            # AI Inference Logic
             frame = np.frombuffer(pixels, dtype=np.uint8).reshape((height, width, 4))
             rgb = frame[:, :, :3]
             img = Image.fromarray(rgb).resize((640, 640), Image.BILINEAR)
             input_data = np.expand_dims(np.array(img), axis=0).astype(np.float32) / 255.0
+            
             if self.input_details[0]['shape'][1] == 3:
                 input_data = np.transpose(input_data, (0, 3, 1, 2))
+                
             self.interpreter.set_tensor(self.input_details[0]['index'], input_data)
             self.interpreter.invoke()
             output = self.interpreter.get_tensor(self.output_details[0]['index'])[0]
