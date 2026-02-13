@@ -27,10 +27,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.buildozer
-          # Using a specific key for the deep clean to ensure we don't pull old errors
-          key: ${{ runner.os }}-buildozer-v2-${{ hashFiles('buildozer.spec') }}
+          # Bumped to v3 to force GitHub to ignore the previous broken 'clang' files
+          key: ${{ runner.os }}-buildozer-v3-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            ${{ runner.os }}-buildozer-v2-
+            ${{ runner.os }}-buildozer-v3-
 
       - name: Install System Dependencies
         run: |
@@ -38,7 +38,8 @@ jobs:
           sudo apt install -y git zip unzip python3-pip autoconf libtool pkg-config \
           zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev \
           libssl-dev aidl libstdc++6
-          pip3 install --user --upgrade Cython==0.29.33 virtualenv buildozer
+          # Force Cython version for Kivy compatibility
+          pip3 install --user --upgrade "Cython<3.0" virtualenv buildozer
 
       - name: Build APK with Buildozer
         run: |
@@ -48,11 +49,10 @@ jobs:
           mkdir -p ~/.android && touch ~/.android/repositories.cfg
           yes | sdkmanager --licenses || true
           
-          # 2. DEEP CLEAN: This solves the "clang: no input files" error 
-          # by wiping the old, broken compiled distribution.
+          # 2. THE FIX: Wipe the broken distribution so clang has fresh input files
           buildozer android clean
           
-          # 3. BUILD: Run the main build
+          # 3. BUILD: Run with verbose logging to catch any remaining issues
           yes | buildozer -v android debug
         env:
           BUILDOZER_ALLOW_ORG_NAME_AS_PACKAGE_NAME: 1
