@@ -37,23 +37,31 @@ jobs:
         run: |
           export PATH=$PATH:~/.local/bin
           
-          # Force ignore the pre-installed NDK version 27 to avoid the crash
+          # Fix Environment Conflicts
           unset ANDROID_NDK_HOME
           unset ANDROID_NDK_ROOT
           unset ANDROID_SDK_ROOT
           
-          # Fix SDK structure
+          # 1. Create the directory structure Buildozer expects
           ANDROID_SDK_DIR=$HOME/.buildozer/android/platform/android-sdk
           mkdir -p $ANDROID_SDK_DIR/cmdline-tools
+          
+          # 2. Download specific compatible Command Line Tools
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O tools.zip
           unzip -q tools.zip
+          
+          # 3. Move them into the 'latest' path (required by Google)
           mkdir -p $ANDROID_SDK_DIR/cmdline-tools/latest
           mv cmdline-tools/* $ANDROID_SDK_DIR/cmdline-tools/latest/
           
-          # Accept Licenses
+          # 4. CRITICAL FIX: Create a symbolic link so Buildozer finds it in 'tools/bin'
+          mkdir -p $ANDROID_SDK_DIR/tools/bin
+          ln -s $ANDROID_SDK_DIR/cmdline-tools/latest/bin/sdkmanager $ANDROID_SDK_DIR/tools/bin/sdkmanager
+          
+          # 5. Accept Licenses before starting
           yes | $ANDROID_SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_DIR --licenses
           
-          # Build
+          # 6. Start the actual build
           buildozer -v android debug
         env:
           BUILDOZER_ALLOW_ORG_NAME_AS_PACKAGE_NAME: 1
