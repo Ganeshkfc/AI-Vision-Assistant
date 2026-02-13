@@ -28,40 +28,43 @@ jobs:
       - name: Install System Dependencies
         run: |
           sudo apt update
+          # Added extra dependencies (libsqlite3, lzma, etc) to ensure Python bundles correctly
           sudo apt install -y git zip unzip python3-pip autoconf libtool pkg-config \
           zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev \
-          libssl-dev aidl libstdc++6 liblzma-dev libgdbm-dev
+          libssl-dev aidl libstdc++6 liblzma-dev libgdbm-dev libsqlite3-dev \
+          tk-dev uuid-dev libreadline-dev
           pip3 install --user --upgrade "Cython<3.0" "setuptools<70" virtualenv buildozer
 
       - name: Build APK with Buildozer
         run: |
           export PATH=$PATH:~/.local/bin
           
+          # DEEP CLEAN: Wipe any corrupted cache from previous attempts
+          rm -rf .buildozer/
+          rm -rf ~/.buildozer/
+          
           # Fix Environment Conflicts
           unset ANDROID_NDK_HOME
           unset ANDROID_NDK_ROOT
           unset ANDROID_SDK_ROOT
           
-          # 1. Create the directory structure Buildozer expects
+          # 1. Force Setup the SDK structure correctly
           ANDROID_SDK_DIR=$HOME/.buildozer/android/platform/android-sdk
           mkdir -p $ANDROID_SDK_DIR/cmdline-tools
-          
-          # 2. Download specific compatible Command Line Tools
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O tools.zip
           unzip -q tools.zip
-          
-          # 3. Move them into the 'latest' path (required by Google)
           mkdir -p $ANDROID_SDK_DIR/cmdline-tools/latest
           mv cmdline-tools/* $ANDROID_SDK_DIR/cmdline-tools/latest/
           
-          # 4. CRITICAL FIX: Create a symbolic link so Buildozer finds it in 'tools/bin'
+          # 2. Link for Buildozer Compatibility
           mkdir -p $ANDROID_SDK_DIR/tools/bin
           ln -s $ANDROID_SDK_DIR/cmdline-tools/latest/bin/sdkmanager $ANDROID_SDK_DIR/tools/bin/sdkmanager
           
-          # 5. Accept Licenses before starting
+          # 3. Accept Licenses
           yes | $ANDROID_SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_DIR --licenses
           
-          # 6. Start the actual build
+          # 4. Final Build with explicit Clean
+          buildozer android clean
           buildozer -v android debug
         env:
           BUILDOZER_ALLOW_ORG_NAME_AS_PACKAGE_NAME: 1
