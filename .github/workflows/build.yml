@@ -18,7 +18,6 @@ jobs:
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
           sudo apt-get clean
-          df -h
 
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -34,14 +33,6 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Cache Buildozer
-        uses: actions/cache@v4
-        with:
-          path: ~/.buildozer
-          key: ${{ runner.os }}-buildozer-v11-${{ hashFiles('buildozer.spec') }}
-          restore-keys: |
-            ${{ runner.os }}-buildozer-v11-
-
       - name: Install System Dependencies
         run: |
           sudo apt update
@@ -53,10 +44,13 @@ jobs:
       - name: Build APK with Buildozer
         run: |
           export PATH=$PATH:~/.local/bin
-          # Conditional clean to prevent FileNotFoundError on fresh runs
-          if [ -d ".buildozer/android/platform/python-for-android" ]; then
-            buildozer android clean
-          fi
+          
+          # Fix for the "Stuck at License" error:
+          # This creates the license files that the Android SDK expects.
+          mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
+          echo -e "8933bad161af4178b1185d1a37fbf41ea5269c55\nd56f5187479451e05573651390365f13070f01a1\n24333f8a63b6825ea4c551402c46a4e1716311d0" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+          
+          # Start the build with 'yes' to handle any other unexpected prompts
           yes | buildozer -v android debug
         env:
           BUILDOZER_ALLOW_ORG_NAME_AS_PACKAGE_NAME: 1
