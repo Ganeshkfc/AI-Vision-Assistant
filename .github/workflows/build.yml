@@ -37,17 +37,13 @@ jobs:
       - name: Build APK with Buildozer
         run: |
           export PATH=$PATH:~/.local/bin
-          
-          # 1. CLEAN START: Remove previous build artifacts
           rm -rf .buildozer/
           rm -rf ~/.buildozer/
           
-          # Fix Environment Conflicts
           unset ANDROID_NDK_HOME
           unset ANDROID_NDK_ROOT
           unset ANDROID_SDK_ROOT
           
-          # 2. Setup the SDK structure Buildozer expects
           ANDROID_SDK_DIR=$HOME/.buildozer/android/platform/android-sdk
           mkdir -p $ANDROID_SDK_DIR/cmdline-tools
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O tools.zip
@@ -55,14 +51,11 @@ jobs:
           mkdir -p $ANDROID_SDK_DIR/cmdline-tools/latest
           mv cmdline-tools/* $ANDROID_SDK_DIR/cmdline-tools/latest/
           
-          # Link for Compatibility
-          mkdir -p $ANDROID_SDK_DIR/tools/bin
-          ln -s $ANDROID_SDK_DIR/cmdline-tools/latest/bin/sdkmanager $ANDROID_SDK_DIR/tools/bin/sdkmanager
-          
-          # 3. FORCE LICENSE ACCEPTANCE: Bypasses the "7 of 7 licenses" prompt
+          # Force accept all licenses including extras
+          mkdir -p $ANDROID_SDK_DIR/licenses
+          echo -e "8933bad161af4178b1185d1a37fbf41ea5269c55\nd56f5187479451e06973214220025112f1837542\n24333f8a63b682569cc73e05f3d056a00df5e1c2\n84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_SDK_DIR/licenses/android-sdk-license
           yes | $ANDROID_SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_DIR --licenses || true
           
-          # 4. FINAL BUILD
           buildozer -v android debug
         env:
           BUILDOZER_ALLOW_ORG_NAME_AS_PACKAGE_NAME: 1
