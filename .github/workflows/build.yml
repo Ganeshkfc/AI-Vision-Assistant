@@ -7,6 +7,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    # INCREMENTED TIMEOUT: Sets the job to the maximum allowed 6 hours
+    timeout-minutes: 360
 
     steps:
       - uses: actions/checkout@v4
@@ -28,14 +30,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get remove -y libunwind-14-dev || true
-          # ADDED 'patchelf' - This is critical for NumPy compilation
+          # Added patchelf and wget/unzip for robust NDK handling
           sudo apt-get install -y libunwind-dev build-essential libffi-dev libssl-dev ffmpeg \
             libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
             libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev \
             zlib1g-dev libgstreamer1.0-dev gstreamer1.0-plugins-base \
             gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
-            patchelf
+            patchelf wget unzip
           pip install --upgrade pip
+          # Using specific Cython for best NumPy/Kivy compatibility
           pip install buildozer cython==0.29.33
 
       - name: Setup Java
@@ -47,15 +50,22 @@ jobs:
       - name: Build APK with Buildozer
         run: |
           export PATH=$PATH:~/.local/bin
+          
+          # Clean environment variables to let Buildozer manage its own SDK/NDK
           unset ANDROID_NDK_HOME
           unset ANDROID_NDK_ROOT
           unset ANDROID_SDK_ROOT
           
-          # Force clean the platform if it's stuck, but keep the cache
-          if [ -d ".buildozer/android/platform/build" ]; then
+          # LOGIC FIX: 
+          # If a build timed out, the NumPy recipe is often corrupted.
+          # We check if a build was in progress and clean the problematic recipe 
+          # so it can start fresh while keeping the rest of the cache.
+          if [ -d ".buildozer/android/platform/build-arm64-v8a/build/other_builds/numpy" ]; then
+             echo "Detected potentially corrupted NumPy build, cleaning recipe..."
              buildozer android p4a -- clean_recipe numpy
           fi
           
+          # Run build with verbose logging
           buildozer -v android debug
 
       - name: Upload APK
