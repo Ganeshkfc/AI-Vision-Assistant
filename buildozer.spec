@@ -4,14 +4,16 @@ package.name = aivisionassistant
 package.domain = org.renpy
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,tflite,txt
-# EXCLUSION FIX: Vital to avoid GitHub timeout during bytecode compilation
-android.exclude_src = bin/*, .google*, tests/*, **/test/*, **/tests/*, **/idle_test/*, **/lib-tk/*, **/lib2to3/*, **/numpy/distutils/tests/*, **/numpy/typing/tests/*, **/numpy/core/tests/*, **/PIL/tests/*
+
+# EXCLUSION FIX: Expanded to remove all test and doc folders from heavy libraries.
+# This prevents the "compileall" step from timing out on GitHub.
+android.exclude_src = bin/*, .google*, tests/*, **/test/*, **/tests/*, **/idle_test/*, **/lib-tk/*, **/lib2to3/*, **/numpy/distutils/tests/*, **/numpy/typing/tests/*, **/numpy/core/tests/*, **/numpy/f2py/tests/*, **/numpy/tests/*, **/PIL/tests/*, **/tflite_runtime/tests/*, **/doc/*, **/docs/*, **/examples/*
 
 version = 1.0
 orientation = portrait
 fullscreen = 0
 
-# Updated Requirements for your specific main.py logic
+# Requirements optimized for your VisionApp logic
 requirements = python3, kivy==2.3.0, camera4kivy, gestures4kivy, pillow, jnius, numpy, tflite-runtime, android
 
 # Camera4Kivy specific hook (DO NOT CHANGE)
@@ -29,6 +31,8 @@ android.wakelock = True
 
 # Targeting modern 64-bit devices
 android.archs = arm64-v8a
+
+# LTO fix to prevent linker errors and speed up compilation
 android.extra_cflags = -Wno-error=implicit-function-declaration -fno-lto
 
 [buildozer]
