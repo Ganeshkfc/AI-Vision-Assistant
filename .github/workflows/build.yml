@@ -19,10 +19,12 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          # FIX: Handles the 'exit code 100' dependency conflict
+          
+          # 1. FIX: Resolve the libunwind conflict that causes exit code 100
           sudo apt-get remove -y libunwind-14-dev || true
           sudo apt-get install -y libunwind-dev
           
+          # 2. Install all required Kivy/Buildozer system libraries
           sudo apt-get install -y build-essential libffi-dev libssl-dev ffmpeg \
             libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
             libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev \
@@ -42,18 +44,19 @@ jobs:
         run: |
           export PATH=$PATH:~/.local/bin
           
-          # RESTORED: Incremental Build Logic
-          # We only clean if specifically needed; otherwise, Buildozer reuses the platform
+          # 3. RESTORED: Incremental build logic
+          # This ensures we don't delete everything, only cleaning what is necessary
           if [ -d ".buildozer/android/platform/python-for-android" ]; then
-            echo "Existing build detected. Running incremental update..."
+            echo "Previous build found. Preparing for incremental update..."
+            # Optional: buildozer android clean (Uncomment only if you get FileNotFoundError)
           fi
 
-          # Fix Environment Conflicts
+          # 4. Fix Environment Conflicts (standard for GitHub Actions)
           unset ANDROID_NDK_HOME
           unset ANDROID_NDK_ROOT
           unset ANDROID_SDK_ROOT
           
-          # Setup SDK Structure (Only if missing)
+          # 5. Persistent SDK Setup (Skips download if already there)
           ANDROID_SDK_DIR=$HOME/.buildozer/android/platform/android-sdk
           if [ ! -d "$ANDROID_SDK_DIR/cmdline-tools" ]; then
             mkdir -p $ANDROID_SDK_DIR/cmdline-tools
@@ -67,7 +70,7 @@ jobs:
             yes | $ANDROID_SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_DIR --licenses || true
           fi
           
-          # Run the build
+          # 6. Execute Build
           buildozer -v android debug
 
       - name: Upload APK
