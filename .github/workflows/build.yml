@@ -49,7 +49,8 @@ jobs:
           unset ANDROID_NDK_ROOT
           unset ANDROID_SDK_ROOT
           
-          # This clears the corrupted NumPy build so the fix below can work
+          # This specifically clears the 'broken' NumPy files so they rebuild 
+          # correctly without LTO.
           buildozer android p4a -- clean_recipe numpy
           
           buildozer -v android debug
