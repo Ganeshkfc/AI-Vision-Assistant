@@ -21,17 +21,19 @@ if platform == 'android':
     from android.permissions import request_permissions, Permission
 
 # --- TFLITE RUNTIME ---
+# Improved import logic for robustness during the build process
 try:
     import tflite_runtime.interpreter as tflite
 except ImportError:
     try:
         import tensorflow.lite as tflite
     except ImportError:
+        tflite = None
         print("TFLite not found")
 
 class VisionApp(App):
     def build(self):
-        # Your Original App Logic & Settings
+        # Your Original App Logic & Settings (Unchanged)
         self.current_mode = 1 
         self.KNOWN_WIDTHS = {'person': 50, 'chair': 45, 'bottle': 8, 'cell phone': 7}
         self.FOCAL_LENGTH = 715 
@@ -43,7 +45,6 @@ class VisionApp(App):
         self.tts = None
         if platform == 'android':
             try:
-                # FIXED: Using org.renpy.android.PythonActivity for better stability
                 PythonActivity = autoclass('org.renpy.android.PythonActivity')
                 self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
             except Exception as e:
@@ -53,15 +54,15 @@ class VisionApp(App):
         cur_dir = os.path.dirname(os.path.abspath(__file__))
         model_path = os.path.join(cur_dir, "yolov8n_float32.tflite")
         
-        if os.path.exists(model_path):
+        if os.path.exists(model_path) and tflite:
             self.interpreter = tflite.Interpreter(model_path=model_path)
             self.interpreter.allocate_tensors()
             self.input_details = self.interpreter.get_input_details()
             self.output_details = self.interpreter.get_output_details()
         else:
-            print(f"CRITICAL: Model file not found at {model_path}")
+            print(f"CRITICAL: Model file not found or TFLite missing at {model_path}")
 
-        # Your GUI Layout
+        # Your GUI Layout (Unchanged)
         layout = BoxLayout(orientation='vertical')
         self.preview = Preview(aspect_ratio='16:9', enable_analyze_pixels=True)
         self.preview.analyze_pixels_callback = self.analyze_frame
@@ -102,9 +103,7 @@ class VisionApp(App):
             self.speak("Camera permission required.")
 
     def start_camera(self):
-        # Delayed connection to prevent race conditions during startup
         Clock.schedule_once(lambda dt: self.preview.connect_camera(camera_id='back'), 0.5)
-        # Your specific welcome message
         Clock.schedule_once(lambda dt: self.speak("AI vision Activated. Mode 1 active. Detecting multiple objects. Tap your phone's top screen to change mode. tap on the bottom screen to close the application."), 1.5)
 
     def toggle_mode(self, instance):
