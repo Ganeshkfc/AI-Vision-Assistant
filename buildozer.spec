@@ -29,7 +29,7 @@ android.wakelock = True
 
 # Targeting modern 64-bit devices
 android.archs = arm64-v8a
-android.extra_cflags = "-Wno-error=implicit-function-declaration -fno-lto"
+android.extra_cflags = -Wno-error=implicit-function-declaration -fno-lto
 
 [buildozer]
 log_level = 2
