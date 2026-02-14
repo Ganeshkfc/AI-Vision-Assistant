@@ -16,7 +16,6 @@ jobs:
         with:
           python-version: '3.10'
 
-      # Caches your progress so you don't start from zero after a timeout
       - name: Cache Buildozer
         uses: actions/cache@v4
         with:
@@ -46,17 +45,13 @@ jobs:
       - name: Build APK with Buildozer
         run: |
           export PATH=$PATH:~/.local/bin
-          
-          # Force clean SDK path to avoid common environment conflicts
           unset ANDROID_NDK_HOME
           unset ANDROID_NDK_ROOT
           unset ANDROID_SDK_ROOT
           
-          # 1. FIX: Clean only the corrupted NumPy build to fix the linker error
-          # This keeps your SDK/NDK downloads safe while fixing the code error.
+          # This clears the corrupted NumPy build so the fix below can work
           buildozer android p4a -- clean_recipe numpy
           
-          # 2. Run the build (using -v for detailed logs)
           buildozer -v android debug
 
       - name: Upload APK
