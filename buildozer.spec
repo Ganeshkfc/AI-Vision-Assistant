@@ -5,7 +5,7 @@ package.domain = org.renpy
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,tflite,txt
 # EXCLUSION FIX: Vital to avoid GitHub timeout during bytecode compilation
-android.exclude_src = bin/*, .google*, tests/*, **/test/*, **/tests/*, **/idle_test/*, **/lib-tk/*, **/lib2to3/*
+android.exclude_src = bin/*, .google*, tests/*, **/test/*, **/tests/*, **/idle_test/*, **/lib-tk/*, **/lib2to3/*, **/numpy/distutils/tests/*, **/numpy/typing/tests/*
 
 version = 1.0
 orientation = portrait
