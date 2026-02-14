@@ -16,21 +16,24 @@ jobs:
         with:
           python-version: '3.10'
 
+      # NEW: Cache Buildozer to prevent 6-hour timeouts
+      - name: Cache Buildozer
+        uses: actions/cache@v4
+        with:
+          path: .buildozer
+          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            ${{ runner.os }}-buildozer-
+
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          
-          # 1. FIX: Resolve the libunwind conflict that causes exit code 100
           sudo apt-get remove -y libunwind-14-dev || true
-          sudo apt-get install -y libunwind-dev
-          
-          # 2. Install all required Kivy/Buildozer system libraries
-          sudo apt-get install -y build-essential libffi-dev libssl-dev ffmpeg \
+          sudo apt-get install -y libunwind-dev build-essential libffi-dev libssl-dev ffmpeg \
             libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
             libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev \
             zlib1g-dev libgstreamer1.0-dev gstreamer1.0-plugins-base \
             gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly
-          
           pip install --upgrade pip
           pip install buildozer cython
 
@@ -44,33 +47,12 @@ jobs:
         run: |
           export PATH=$PATH:~/.local/bin
           
-          # 3. RESTORED: Incremental build logic
-          # This ensures we don't delete everything, only cleaning what is necessary
-          if [ -d ".buildozer/android/platform/python-for-android" ]; then
-            echo "Previous build found. Preparing for incremental update..."
-            # Optional: buildozer android clean (Uncomment only if you get FileNotFoundError)
-          fi
-
-          # 4. Fix Environment Conflicts (standard for GitHub Actions)
+          # Force clean SDK path to avoid common Buildozer errors
           unset ANDROID_NDK_HOME
           unset ANDROID_NDK_ROOT
           unset ANDROID_SDK_ROOT
           
-          # 5. Persistent SDK Setup (Skips download if already there)
-          ANDROID_SDK_DIR=$HOME/.buildozer/android/platform/android-sdk
-          if [ ! -d "$ANDROID_SDK_DIR/cmdline-tools" ]; then
-            mkdir -p $ANDROID_SDK_DIR/cmdline-tools
-            wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O tools.zip
-            unzip -q tools.zip
-            mkdir -p $ANDROID_SDK_DIR/cmdline-tools/latest
-            mv cmdline-tools/* $ANDROID_SDK_DIR/cmdline-tools/latest/
-            
-            mkdir -p $ANDROID_SDK_DIR/tools/bin
-            ln -s $ANDROID_SDK_DIR/cmdline-tools/latest/bin/sdkmanager $ANDROID_SDK_DIR/tools/bin/sdkmanager
-            yes | $ANDROID_SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_DIR --licenses || true
-          fi
-          
-          # 6. Execute Build
+          # Only run the full build
           buildozer -v android debug
 
       - name: Upload APK
