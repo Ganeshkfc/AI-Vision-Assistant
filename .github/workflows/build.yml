@@ -8,6 +8,7 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     # INCREMENTED TIMEOUT: Sets the job to the maximum allowed 6 hours
+    # This gives NumPy and TFLite enough time to compile without being killed.
     timeout-minutes: 360
 
     steps:
@@ -30,15 +31,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get remove -y libunwind-14-dev || true
-          # Added patchelf and wget/unzip for robust NDK handling
+          # ADDED: patchelf (vital for fixing shared libraries), automake, autoconf (for compiling C extensions)
           sudo apt-get install -y libunwind-dev build-essential libffi-dev libssl-dev ffmpeg \
             libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
             libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev \
             zlib1g-dev libgstreamer1.0-dev gstreamer1.0-plugins-base \
             gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
-            patchelf wget unzip
+            patchelf wget unzip zip autoconf automake libtool
           pip install --upgrade pip
-          # Using specific Cython for best NumPy/Kivy compatibility
+          # Cython 0.29.33 is strictly required for Kivy 2.3.0 compatibility
           pip install buildozer cython==0.29.33
 
       - name: Setup Java
@@ -51,21 +52,21 @@ jobs:
         run: |
           export PATH=$PATH:~/.local/bin
           
-          # Clean environment variables to let Buildozer manage its own SDK/NDK
+          # Clean environment variables to ensure Buildozer downloads the correct NDK
           unset ANDROID_NDK_HOME
           unset ANDROID_NDK_ROOT
           unset ANDROID_SDK_ROOT
           
-          # LOGIC FIX: 
-          # If a build timed out, the NumPy recipe is often corrupted.
-          # We check if a build was in progress and clean the problematic recipe 
-          # so it can start fresh while keeping the rest of the cache.
-          if [ -d ".buildozer/android/platform/build-arm64-v8a/build/other_builds/numpy" ]; then
-             echo "Detected potentially corrupted NumPy build, cleaning recipe..."
+          # SMART CLEAN LOGIC:
+          # If we are restoring from a cache, we MUST clean NumPy. 
+          # Why? Because your cache contains "bad" NumPy files from the failed runs.
+          # We need to force it to rebuild using the new "-fno-lto" flag we added to buildozer.spec.
+          if [ -d ".buildozer/android/platform/build-arm64-v8a" ]; then
+             echo "Cache detected: Cleaning NumPy to ensure new flags are applied..."
              buildozer android p4a -- clean_recipe numpy
           fi
           
-          # Run build with verbose logging
+          # Run the build with verbose output
           buildozer -v android debug
 
       - name: Upload APK
