@@ -104,7 +104,7 @@ class VisionApp(App):
 
     def start_camera(self):
         Clock.schedule_once(lambda dt: self.preview.connect_camera(camera_id='back'), 0.5)
-        Clock.schedule_once(lambda dt: self.speak("AI vision Activated. Mode 1 active. Detecting multiple objects. Tap your phone's top screen to change mode. tap on the bottom screen to close the application."), 1.5)
+        Clock.schedule_once(lambda dt: self.speak("AI vision Activated. Mode 1 active. Detecting multiple objects. To change mode. Tap your phone's top screen . To close the application. Tap on the bottom screen "), 1.5)
 
     def toggle_mode(self, instance):
         if self.current_mode == 1:
