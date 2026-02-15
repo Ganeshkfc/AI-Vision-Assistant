@@ -45,7 +45,7 @@ class VisionApp(App):
         self.tts = None
         if platform == 'android':
             try:
-                PythonActivity = autoclass('org.renpy.android.PythonActivity')
+                PythonActivity = autoclass('org.aivision.android.PythonActivity')
                 self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
             except Exception as e:
                 print(f"TTS Initialization Error: {e}")
