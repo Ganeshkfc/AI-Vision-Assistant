@@ -24,9 +24,9 @@ jobs:
             ~/.buildozer
             .buildozer
             bin/
-          key: ${{ runner.os }}-buildozer-v13-${{ hashFiles('buildozer.spec') }}
+          key: ${{ runner.os }}-buildozer-v14-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            ${{ runner.os }}-buildozer-v13-
+            ${{ runner.os }}-buildozer-v14-
 
       - name: Install Dependencies
         run: |
@@ -47,19 +47,21 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Free Disk Space and Create Swap
+      - name: Configure Virtual Memory
         run: |
-          # Create a 4GB swap file to prevent "Killed" (OOM) errors
-          sudo fallocate -l 4G /swapfile
+          # Disable any existing swap to fix the "Text file busy" error
+          sudo swapoff -a || true
+          
+          # Create a 4GB swap file using dd (more reliable on some filesystems)
+          sudo dd if=/dev/zero of=/swapfile bs=1M count=4096
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
           
-          # Clean up unnecessary system bloat to free up disk space
+          # Clean up massive unused tools to free disk space
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /opt/ghc
           sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
 
       - name: Build APK with Buildozer
         run: |
@@ -68,12 +70,12 @@ jobs:
           unset ANDROID_NDK_ROOT
           unset ANDROID_SDK_ROOT
           
-          # Manual directory wipe to ensure a clean state
+          # Manual directory wipe for a clean state
           rm -rf .buildozer/
           rm -rf bin/
           rm -rf ~/.buildozer/
           
-          # Final build attempt with maximum safety flags
+          # Execute build with specific memory-safe flags
           buildozer -v android debug -- --no-byte-compile-python --no-compile-pyo
 
       - name: Upload APK
