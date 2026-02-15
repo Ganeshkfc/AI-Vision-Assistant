@@ -21,10 +21,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .buildozer
-          # Using v7 to start fresh with the new memory optimizations
-          key: ${{ runner.os }}-buildozer-v7-${{ hashFiles('buildozer.spec') }}
+          # Incremented to v8 to apply new memory-saving deletions
+          key: ${{ runner.os }}-buildozer-v8-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            ${{ runner.os }}-buildozer-v7-
+            ${{ runner.os }}-buildozer-v8-
 
       - name: Install Dependencies
         run: |
@@ -52,22 +52,16 @@ jobs:
           unset ANDROID_NDK_ROOT
           unset ANDROID_SDK_ROOT
           
-          # OPTIMIZATION: We delete the 'test' and 'lib2to3' folders from the distribution.
-          # These folders contain thousands of small files that crash the compiler.
-          # They are not needed to run your app.
+          # CRITICAL OPTIMIZATION: We delete the 'test' folders from the distribution.
+          # These folders contain thousands of files that crash the compiler and aren't needed.
           DIST_PATH=".buildozer/android/platform/build-arm64-v8a/build/other_builds/python3/arm64-v8a__ndk_target_24/python3/Lib"
           if [ -d "$DIST_PATH" ]; then
             rm -rf "$DIST_PATH/test"
-            rm -rf "$DIST_PATH/lib2to3"
+            rm -rf "$DIST_PATH/ctypes/test"
+            rm -rf "$DIST_PATH/distutils/tests"
           fi
           
-          # We also clear the app packaging folder to ensure the manifest is clean
+          # Refresh the packaging folder to ensure the manifest is correct
           rm -rf .buildozer/android/app
           
           buildozer -v android debug
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: VisionApp-Package
-          path: bin/*.apk
