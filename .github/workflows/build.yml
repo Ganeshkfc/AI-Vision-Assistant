@@ -7,7 +7,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    # High timeout to allow for a full re-compile after the reset
     timeout-minutes: 360
 
     steps:
@@ -22,10 +21,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .buildozer
-          # Using 'v3' to force GitHub to ignore any remaining old domain data
-          key: ${{ runner.os }}-buildozer-v3-${{ hashFiles('buildozer.spec') }}
+          # Updated to 'v4' to bypass all previous corrupted caches
+          key: ${{ runner.os }}-buildozer-v4-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            ${{ runner.os }}-buildozer-v3-
+            ${{ runner.os }}-buildozer-v4-
 
       - name: Install Dependencies
         run: |
@@ -53,12 +52,11 @@ jobs:
           unset ANDROID_NDK_ROOT
           unset ANDROID_SDK_ROOT
           
-          # NUCLEAR RESET: 
-          # We must delete the entire platform directory because changing the domain 
-          # name mid-project causes pyjnius and other recipes to point to non-existent paths.
-          # This forces Buildozer to recreate the 'org.ganesh' structure correctly.
+          # NUCLEAR RESET: Deletes everything related to the old domain and 
+          # previous failed builds to ensure 'org.ganesh' is built from scratch.
           rm -rf .buildozer/android/platform/python-for-android
           rm -rf .buildozer/android/platform/build-arm64-v8a
+          rm -rf .buildozer/android/app
           
           buildozer -v android debug
 
