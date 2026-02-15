@@ -21,10 +21,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .buildozer
-          # Updated to v9 to lock in the final memory-saving configuration
-          key: ${{ runner.os }}-buildozer-v9-${{ hashFiles('buildozer.spec') }}
+          # Updated to v10 to force a fresh start on the problematic libraries
+          key: ${{ runner.os }}-buildozer-v10-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            ${{ runner.os }}-buildozer-v9-
+            ${{ runner.os }}-buildozer-v10-
 
       - name: Install Dependencies
         run: |
@@ -37,7 +37,8 @@ jobs:
             gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
             patchelf wget unzip zip autoconf automake libtool
           pip install --upgrade pip
-          pip install buildozer "cython<3.0"
+          # Explicitly using 0.29.33 to solve the missing .c file issue
+          pip install "cython<3.0" buildozer 
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -52,23 +53,18 @@ jobs:
           unset ANDROID_NDK_ROOT
           unset ANDROID_SDK_ROOT
           
-          # AGGRESSIVE CLEANUP: Removing these 3 folders solves the memory crash.
-          # Your logs showed the crash happens exactly during 'idle_test' and 'test'.
-          PYTHON_LIB=".buildozer/android/platform/build-arm64-v8a/build/other_builds/python3/arm64-v8a__ndk_target_24/python3/Lib"
-          if [ -d "$PYTHON_LIB" ]; then
-            rm -rf "$PYTHON_LIB/test"
-            rm -rf "$PYTHON_LIB/idlelib"
-            rm -rf "$PYTHON_LIB/unittest"
-            rm -rf "$PYTHON_LIB/tkinter"
-          fi
+          # FIX 1: Clean the corrupted Kivy build folder to fix 'svg.c' missing error
+          rm -rf .buildozer/android/platform/build-arm64-v8a/build/other_builds/kivy
           
-          # Clean the packaging folder to ensure the new domain 'org.ganesh' is used
+          # FIX 2: Refresh the app folder for the 'org.ganesh' domain
           rm -rf .buildozer/android/app
           
-          buildozer -v android debug
+          # FIX 3: Disable byte-compilation to prevent the "Killed" memory crash.
+          # The '-- --no-byte-compile-python' flag tells Buildozer to skip the crash-prone optimization step.
+          buildozer -v android debug -- --no-byte-compile-python
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: VisionApp-Package
+          name: VisionApp-Final
           path: bin/*.apk
