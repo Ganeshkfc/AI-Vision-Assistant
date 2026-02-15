@@ -5,7 +5,10 @@ package.domain = org.aivision
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,tflite,txt
 
-# Safe exclusions to prevent FileNotFoundError
+# Added to prevent memory exhaustion by ignoring heavy non-source folders
+source.exclude_dirs = tests, bin, venv, .venv, .git, .github, docs, examples
+
+# Patterns to exclude from being packaged into the APK
 android.exclude_src = bin/*, .google*, tests/*, **/test/*, **/tests/*, **/idle_test/*, **/lib-tk/*, **/lib2to3/*, **/doc/*, **/docs/*, **/examples/*
 
 version = 1.0
