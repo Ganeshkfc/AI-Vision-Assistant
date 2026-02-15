@@ -6,8 +6,8 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,tflite,txt
 
 # EXCLUSION FIX: Expanded to remove all test and doc folders from heavy libraries.
-# This prevents the "compileall" step from timing out on GitHub.
-android.exclude_src = bin/*, .google*, tests/*, **/test/*, **/tests/*, **/idle_test/*, **/lib-tk/*, **/lib2to3/*, **/numpy/distutils/tests/*, **/numpy/typing/tests/*, **/numpy/core/tests/*, **/numpy/f2py/tests/*, **/numpy/tests/*, **/PIL/tests/*, **/tflite_runtime/tests/*, **/doc/*, **/docs/*, **/examples/*
+# Removed explicit numpy test exclusions to prevent FileNotFoundError during packaging
+android.exclude_src = bin/*, .google*, tests/*, **/test/*, **/tests/*, **/idle_test/*, **/lib-tk/*, **/lib2to3/*, **/doc/*, **/docs/*, **/examples/*
 
 version = 1.0
 orientation = portrait
