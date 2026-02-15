@@ -7,7 +7,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    # Increased timeout because distclean forces a full re-compile
+    # High timeout to handle fresh re-compiles after manual wipes
     timeout-minutes: 400
 
     steps:
@@ -21,11 +21,14 @@ jobs:
       - name: Cache Buildozer
         uses: actions/cache@v4
         with:
-          path: .buildozer
-          # Using v11 to ensure we start fresh after the memory crashes
-          key: ${{ runner.os }}-buildozer-v11-${{ hashFiles('buildozer.spec') }}
+          path: |
+            ~/.buildozer
+            .buildozer
+            bin/
+          # Versioned key (v12) to force a clean slate for this update
+          key: ${{ runner.os }}-buildozer-v12-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            ${{ runner.os }}-buildozer-v11-
+            ${{ runner.os }}-buildozer-v12-
 
       - name: Install Dependencies
         run: |
@@ -53,12 +56,14 @@ jobs:
           unset ANDROID_NDK_ROOT
           unset ANDROID_SDK_ROOT
           
-          # STEP 1: Deep clean to fix the "Killed" and "Missing File" state
-          # This ensures that old corrupted data from org.renpy or failed runs is gone.
-          buildozer android distclean
+          # STEP 1: Manual directory wipe instead of distclean
+          # This removes local build artifacts and the global buildozer cache
+          rm -rf .buildozer/
+          rm -rf bin/
+          rm -rf ~/.buildozer/
           
-          # STEP 2: Build the APK with a memory-safe flag
-          # The '-- --no-byte-compile-python' prevents the crash you've been seeing at 99%.
+          # STEP 2: Build the APK
+          # The '-- --no-byte-compile-python' flag prevents OOM (Out of Memory) crashes
           buildozer -v android debug -- --no-byte-compile-python
 
       - name: Upload APK
