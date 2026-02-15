@@ -24,23 +24,25 @@ jobs:
             ~/.buildozer
             .buildozer
             bin/
-          # Updated to v15 to start fresh with the new swap logic
-          key: ${{ runner.os }}-buildozer-v15-${{ hashFiles('buildozer.spec') }}
+          # Version 16: New cache for the Cython 3.0 upgrade
+          key: ${{ runner.os }}-buildozer-v16-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            ${{ runner.os }}-buildozer-v15-
+            ${{ runner.os }}-buildozer-v16-
 
       - name: Install Dependencies
         run: |
           sudo apt-get update
           sudo apt-get remove -y libunwind-14-dev || true
+          # Added 'gettext' to provide 'autopoint', which is required for libffi build
           sudo apt-get install -y libunwind-dev build-essential libffi-dev libssl-dev ffmpeg \
             libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
             libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev \
             zlib1g-dev libgstreamer1.0-dev gstreamer1.0-plugins-base \
             gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
-            patchelf wget unzip zip autoconf automake libtool
+            patchelf wget unzip zip autoconf automake libtool gettext
           pip install --upgrade pip
-          pip install buildozer "cython<3.0"
+          # REMOVED "cython<3.0" pin. Kivy 2.3.0 needs modern Cython.
+          pip install buildozer cython
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -73,12 +75,12 @@ jobs:
           unset ANDROID_NDK_ROOT
           unset ANDROID_SDK_ROOT
           
-          # Manual directory wipe to ensure a clean state
+          # Clean previous build artifacts to force a fresh Cython run
           rm -rf .buildozer/
           rm -rf bin/
           rm -rf ~/.buildozer/
           
-          # Final build attempt with maximum safety flags
+          # Final build attempt with memory-safe flags
           buildozer -v android debug -- --no-byte-compile-python --no-compile-pyo
 
       - name: Upload APK
