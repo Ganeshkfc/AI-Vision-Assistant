@@ -51,7 +51,8 @@ jobs:
           unset ANDROID_NDK_ROOT
           unset ANDROID_SDK_ROOT
           
-          # FORCE CLEAN: Wipes old manifest files to fix the Domain Name mismatch error
+          # FORCE CLEAN OLD DISTRIBUTIONS: This prevents the FileNotFoundError
+          # by removing old "org.renpy" folders so the new "org.ganesh" ones can be created.
           rm -rf .buildozer/android/platform/python-for-android/dists
           
           buildozer -v android debug
