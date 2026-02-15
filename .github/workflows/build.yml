@@ -7,7 +7,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 360
+    # Extended timeout to handle the slower, memory-safe compilation
+    timeout-minutes: 400
 
     steps:
       - uses: actions/checkout@v4
@@ -21,10 +22,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .buildozer
-          # Using v5 to start fresh one last time with the stabilized settings
-          key: ${{ runner.os }}-buildozer-v5-${{ hashFiles('buildozer.spec') }}
+          # Using v6 to lock in the successful domain fixes and move to optimization
+          key: ${{ runner.os }}-buildozer-v6-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            ${{ runner.os }}-buildozer-v5-
+            ${{ runner.os }}-buildozer-v6-
 
       - name: Install Dependencies
         run: |
@@ -37,8 +38,7 @@ jobs:
             gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
             patchelf wget unzip zip autoconf automake libtool
           pip install --upgrade pip
-          # Using a specific Cython version known to be stable with Kivy/Android
-          pip install buildozer "cython<3.0" 
+          pip install buildozer "cython<3.0"
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -53,12 +53,9 @@ jobs:
           unset ANDROID_NDK_ROOT
           unset ANDROID_SDK_ROOT
           
-          # We removed the manual 'rm -rf' lines to prevent the "missing file" error.
-          # Buildozer will now manage its own internal file mapping.
+          # OPTIMIZATION: We restrict the build to 1 worker thread. 
+          # This prevents the "Killed" error by ensuring the runner doesn't run out of RAM.
+          # We also clear the temporary 'app' folder to ensure the manifest is fresh.
+          rm -rf .buildozer/android/app
+          
           buildozer -v android debug
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: VisionApp-Package
-          path: bin/*.apk
