@@ -21,10 +21,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .buildozer
-          # Updated to 'v4' to bypass all previous corrupted caches
-          key: ${{ runner.os }}-buildozer-v4-${{ hashFiles('buildozer.spec') }}
+          # Using v5 to start fresh one last time with the stabilized settings
+          key: ${{ runner.os }}-buildozer-v5-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            ${{ runner.os }}-buildozer-v4-
+            ${{ runner.os }}-buildozer-v5-
 
       - name: Install Dependencies
         run: |
@@ -37,7 +37,8 @@ jobs:
             gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
             patchelf wget unzip zip autoconf automake libtool
           pip install --upgrade pip
-          pip install buildozer cython==0.29.33
+          # Using a specific Cython version known to be stable with Kivy/Android
+          pip install buildozer "cython<3.0" 
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -52,12 +53,8 @@ jobs:
           unset ANDROID_NDK_ROOT
           unset ANDROID_SDK_ROOT
           
-          # NUCLEAR RESET: Deletes everything related to the old domain and 
-          # previous failed builds to ensure 'org.ganesh' is built from scratch.
-          rm -rf .buildozer/android/platform/python-for-android
-          rm -rf .buildozer/android/platform/build-arm64-v8a
-          rm -rf .buildozer/android/app
-          
+          # We removed the manual 'rm -rf' lines to prevent the "missing file" error.
+          # Buildozer will now manage its own internal file mapping.
           buildozer -v android debug
 
       - name: Upload APK
