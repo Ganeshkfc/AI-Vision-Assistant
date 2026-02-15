@@ -7,7 +7,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    # High timeout to handle fresh re-compiles after manual wipes
     timeout-minutes: 400
 
     steps:
@@ -25,10 +24,9 @@ jobs:
             ~/.buildozer
             .buildozer
             bin/
-          # Versioned key (v12) to force a clean slate for this update
-          key: ${{ runner.os }}-buildozer-v12-${{ hashFiles('buildozer.spec') }}
+          key: ${{ runner.os }}-buildozer-v13-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            ${{ runner.os }}-buildozer-v12-
+            ${{ runner.os }}-buildozer-v13-
 
       - name: Install Dependencies
         run: |
@@ -49,6 +47,20 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Free Disk Space and Create Swap
+        run: |
+          # Create a 4GB swap file to prevent "Killed" (OOM) errors
+          sudo fallocate -l 4G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          
+          # Clean up unnecessary system bloat to free up disk space
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+
       - name: Build APK with Buildozer
         run: |
           export PATH=$PATH:~/.local/bin
@@ -56,15 +68,13 @@ jobs:
           unset ANDROID_NDK_ROOT
           unset ANDROID_SDK_ROOT
           
-          # STEP 1: Manual directory wipe instead of distclean
-          # This removes local build artifacts and the global buildozer cache
+          # Manual directory wipe to ensure a clean state
           rm -rf .buildozer/
           rm -rf bin/
           rm -rf ~/.buildozer/
           
-          # STEP 2: Build the APK
-          # The '-- --no-byte-compile-python' flag prevents OOM (Out of Memory) crashes
-          buildozer -v android debug -- --no-byte-compile-python
+          # Final build attempt with maximum safety flags
+          buildozer -v android debug -- --no-byte-compile-python --no-compile-pyo
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
