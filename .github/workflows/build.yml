@@ -24,9 +24,10 @@ jobs:
             ~/.buildozer
             .buildozer
             bin/
-          key: ${{ runner.os }}-buildozer-v14-${{ hashFiles('buildozer.spec') }}
+          # Updated to v15 to start fresh with the new swap logic
+          key: ${{ runner.os }}-buildozer-v15-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            ${{ runner.os }}-buildozer-v14-
+            ${{ runner.os }}-buildozer-v15-
 
       - name: Install Dependencies
         run: |
@@ -49,16 +50,18 @@ jobs:
 
       - name: Configure Virtual Memory
         run: |
-          # Disable any existing swap to fix the "Text file busy" error
+          # 1. Force disable any existing swap to release the file lock
           sudo swapoff -a || true
           
-          # Create a 4GB swap file using dd (more reliable on some filesystems)
-          sudo dd if=/dev/zero of=/swapfile bs=1M count=4096
+          # 2. Use 'dd' instead of fallocate (more reliable for forcing file creation)
+          sudo dd if=/dev/zero of=/swapfile bs=1M count=4096 status=progress
+          
+          # 3. Secure and activate the new swap space
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
           
-          # Clean up massive unused tools to free disk space
+          # 4. Clean up disk space to ensure we have room
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /opt/ghc
           sudo rm -rf "/usr/local/share/boost"
@@ -70,12 +73,12 @@ jobs:
           unset ANDROID_NDK_ROOT
           unset ANDROID_SDK_ROOT
           
-          # Manual directory wipe for a clean state
+          # Manual directory wipe to ensure a clean state
           rm -rf .buildozer/
           rm -rf bin/
           rm -rf ~/.buildozer/
           
-          # Execute build with specific memory-safe flags
+          # Final build attempt with maximum safety flags
           buildozer -v android debug -- --no-byte-compile-python --no-compile-pyo
 
       - name: Upload APK
