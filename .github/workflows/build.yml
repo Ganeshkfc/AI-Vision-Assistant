@@ -21,9 +21,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .buildozer
-          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
+          # Using 'v2' in the key forces a fresh start if the old cache was corrupted
+          key: ${{ runner.os }}-buildozer-v2-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            ${{ runner.os }}-buildozer-
+            ${{ runner.os }}-buildozer-v2-
 
       - name: Install Dependencies
         run: |
@@ -51,9 +52,10 @@ jobs:
           unset ANDROID_NDK_ROOT
           unset ANDROID_SDK_ROOT
           
-          # FORCE CLEAN OLD DISTRIBUTIONS: This prevents the FileNotFoundError
-          # by removing old "org.renpy" folders so the new "org.ganesh" ones can be created.
+          # FORCE CLEAN: Wipes old manifest and distribution metadata.
+          # This ensures the new domain "org.ganesh" is registered correctly.
           rm -rf .buildozer/android/platform/python-for-android/dists
+          rm -rf .buildozer/android/platform/build-arm64-v8a
           
           buildozer -v android debug
 
