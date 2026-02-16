@@ -97,7 +97,6 @@ class VisionApp(App):
             self.start_camera()
 
     def on_permission_result(self, permissions, grants):
-        # We start camera even if storage is denied, as long as camera is granted
         if grants:
             self.start_camera()
         else:
@@ -138,7 +137,6 @@ class VisionApp(App):
         if not self.interpreter:
             return
         try:
-            # AI Inference Logic
             frame = np.frombuffer(pixels, dtype=np.uint8).reshape((height, width, 4))
             rgb = frame[:, :, :3]
             img = Image.fromarray(rgb).resize((640, 640), Image.BILINEAR)
