@@ -17,8 +17,8 @@ requirements = python3, kivy==2.3.0, cython==3.0.11, camera4kivy, gestures4kivy,
 # Essential hook for CameraX provider
 p4a.hook = camerax_provider/gradle_options.py
 
-android.api = 33
-android.minapi = 24
+android.api = 34
+android.minapi = 21
 android.ndk = 25b
 android.ndk_api = 24
 android.accept_sdk_license = True
