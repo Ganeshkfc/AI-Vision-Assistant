@@ -15,23 +15,44 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
-      # CACHE REMOVED TEMPORARILY TO FIX CORRUPTION
-      # This ensures a 100% clean build environment
+      - name: Maximize Runner Disk Space
+        run: |
+          echo "Before cleanup:"
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo apt-get clean
+          echo "After cleanup:"
+          df -h
 
-      - name: Install Dependencies
+      - name: Configure Virtual Memory (8GB Swap)
+        run: |
+          sudo swapoff -a || true
+          sudo dd if=/dev/zero of=/swapfile bs=1M count=8192
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          free -h
+
+      - name: Install System Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get remove -y libunwind-14-dev || true
-          sudo apt-get install -y libunwind-dev build-essential libffi-dev libssl-dev ffmpeg \
+          sudo apt-get install -y \
+            build-essential libffi-dev libssl-dev ffmpeg \
             libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
             libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev \
             zlib1g-dev libgstreamer1.0-dev gstreamer1.0-plugins-base \
             gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
-            patchelf wget unzip zip autoconf automake libtool gettext
-          pip install --upgrade pip
-          pip install buildozer "cython>=3.0.0" wheel setuptools
+            patchelf wget unzip zip autoconf automake libtool gettext \
+            pkg-config libncurses5-dev libncursesw5-dev libtinfo5 cmake libsqlite3-dev
+          
+          python -m pip install --upgrade pip
+          python -m pip install --user --upgrade buildozer "cython>=3.0.0" virtualenv wheel setuptools
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -39,27 +60,18 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Configure Virtual Memory (Swap)
-        run: |
-          sudo swapoff -a || true
-          sudo dd if=/dev/zero of=/swapfile bs=1M count=4096
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
-          sudo rm -rf /usr/share/dotnet /opt/ghc "/usr/local/share/boost"
-
       - name: Build APK with Buildozer
         run: |
+          # Add local bin to path for buildozer
           export PATH=$PATH:~/.local/bin
-          # Ensure we are using the absolute latest p4a
-          pip install --upgrade python-for-android
           
-          # Force delete every single hidden build folder
+          # Force clean any previous residues
           rm -rf .buildozer/
           rm -rf ~/.buildozer/
           rm -rf bin/
           
-          buildozer -v android debug -- --no-byte-compile-python --no-compile-pyo
+          # Use 'python -m buildozer' to ensure it uses the installed python env
+          python3 -m buildozer -v android debug -- --no-byte-compile-python --no-compile-pyo
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
