@@ -47,10 +47,10 @@ jobs:
       - name: Build APK with Buildozer
         run: |
           export PATH=$PATH:~/.local/bin
-          # CRITICAL: Prevent the 'byte-compilation' hang found in previous logs
+          # FORCE: Skip the bytecode compilation that hangs the runner
           export P4A_NO_BYTECODE_COMPILE=1
           
-          # Force a clean start to remove any half-processed files
+          # Clean old residues for a fresh start
           rm -rf .buildozer/
           
           python3 -m buildozer -v android debug -- --no-byte-compile-python --no-compile-pyo
