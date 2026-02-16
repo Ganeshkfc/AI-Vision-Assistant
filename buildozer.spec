@@ -8,10 +8,10 @@ source.exclude_dirs = tests, bin, venv, .venv, .git, .github
 
 version = 1.0
 
-# Removed explicit numpy version to fix the "HTTP 404" download error
-requirements = python3, hostpython3, kivy, pyjnius, camera4kivy, gestures4kivy, android, numpy, pillow, sqlite3, tflite-runtime, cython==0.29.37
+# Added 'sh' and kept cython pinned for stability
+requirements = python3, hostpython3, kivy, pyjnius, camera4kivy, gestures4kivy, android, numpy, pillow, sqlite3, tflite-runtime, cython==0.29.37, sh
 
-# API 33 is more stable for auto-download than 34
+# Using API 33 and NDK 25b for maximum compatibility with GitHub runners
 android.api = 33
 android.minapi = 24
 android.ndk = 25b
