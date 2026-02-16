@@ -5,16 +5,16 @@ package.domain = org.aivision
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,tflite,txt
 
-# AGGRESSIVE EXCLUSIONS: Keeps the build fast and prevents the 30,000 file hang
+# AGGRESSIVE EXCLUSIONS: Keeps the build fast
 source.exclude_dirs = tests, bin, venv, .venv, .git, .github, docs, examples, Lib/test, Lib/unittest
 source.exclude_patterns = license, README*, *.pyc, *.pyo, */test/*, */tests/*, */unittest/*, */lib-dynload/_test*, */__pycache__/*
 
 version = 1.0
 
-# REQUIREMENTS: These are exactly tuned for your NDK version
-requirements = python3, hostpython3, kivy, pyjnius, camera4kivy, gestures4kivy, android, numpy==1.26.4, pillow, sqlite3, tflite-runtime
+# REQUIREMENTS: Removed '==1.26.4' to fix the 404 Download Error
+requirements = python3, hostpython3, kivy, pyjnius, camera4kivy, gestures4kivy, android, numpy, pillow, sqlite3, tflite-runtime
 
-# PERMISSIONS: (CRITICAL FIX) The app needs these declared to the OS
+# PERMISSIONS: Critical for Camera and Storage access on Android
 android.permissions = CAMERA, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE, INTERNET
 
 android.api = 34
@@ -26,7 +26,7 @@ android.enable_androidx = True
 android.archs = arm64-v8a
 android.allow_backup = False
 
-# SKIP COMPILATION: This prevents the runner timeout
+# SKIP COMPILATION: Prevents timeout
 android.no_byte_compile_python = True
 
 [buildozer]
