@@ -48,7 +48,8 @@ jobs:
           export PATH=$PATH:~/.local/bin
           export P4A_NO_BYTECODE_COMPILE=1
           
-          # Clean start
+          # Clean start - explicitly cleaning the android platform to fix NumPy paths
+          python3 -m buildozer android clean
           rm -rf .buildozer/ bin/
           
           # Final build command
