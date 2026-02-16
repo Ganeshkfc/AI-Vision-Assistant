@@ -57,9 +57,8 @@ jobs:
           export PATH=$PATH:~/.local/bin
           export P4A_NO_BYTECODE_COMPILE=1
           
-          # Use the correct buildozer command to start the build
-          # Buildozer will automatically handle SDK download and license acceptance
-          # because android.accept_sdk_license = True is set in buildozer.spec
+          # We removed the broken 'sdk_update' command.
+          # The 'android.accept_sdk_license = True' in buildozer.spec handles this automatically.
           python3 -m buildozer -v android debug --job 1
 
       - name: Manual Progress Save
