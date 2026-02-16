@@ -47,12 +47,23 @@ jobs:
       - name: Build APK with Buildozer
         run: |
           export PATH=$PATH:~/.local/bin
-          # FORCE: Skip the bytecode compilation that hangs the runner
           export P4A_NO_BYTECODE_COMPILE=1
           
-          # Clean old residues for a fresh start
-          rm -rf .buildozer/
+          # 1. Clean old residues
+          rm -rf .buildozer/ bin/
           
+          # 2. Run a partial build to download the recipes/source
+          # This might fail or stop, which is fine, we just need the folders created
+          timeout 5m buildozer android debug || true
+          
+          # 3. NUCLEAR CLEANUP: Manually delete all test folders from the Python source
+          # This removes the 28,000+ files that are currently killing your build
+          find .buildozer/ -type d -name "test" -exec rm -rf {} + || true
+          find .buildozer/ -type d -name "tests" -exec rm -rf {} + || true
+          find .buildozer/ -type d -name "idlelib" -exec rm -rf {} + || true
+          find .buildozer/ -type d -name "pydoc_data" -exec rm -rf {} + || true
+          
+          # 4. Final Build Attempt with strict flags
           python3 -m buildozer -v android debug -- --no-byte-compile-python --no-compile-pyo
 
       - name: Upload APK
