@@ -46,12 +46,13 @@ jobs:
       - name: Build APK with Buildozer
         run: |
           export PATH=$PATH:~/.local/bin
+          # This variable tells the compiler to skip the slow bytecode stage
           export P4A_NO_BYTECODE_COMPILE=1
           
-          # Clean start: Only use rm -rf. Do NOT run 'buildozer android clean' here.
+          # Remove local build folders for a truly fresh start
           rm -rf .buildozer/ bin/
           
-          # Run the build
+          # Final build command
           python3 -m buildozer -v android debug
 
       - name: Upload APK
