@@ -27,7 +27,6 @@ jobs:
 
       - name: Maximize Runner Disk Space
         run: |
-          # Aggressive cleanup to make room for Swap + Build
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc "/usr/local/share/boost" "$AGENT_TOOLSDIRECTORY"
           sudo docker image prune -a -f
           sudo apt-get clean
@@ -35,7 +34,6 @@ jobs:
       - name: Configure Balanced Virtual Memory (7GB Swap)
         run: |
           sudo swapoff -a || true
-          # 7GB is the maximum safe size that leaves room for NDK/SDK
           sudo dd if=/dev/zero of=/swapfile bs=1M count=7168
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
@@ -55,10 +53,15 @@ jobs:
           java-version: '17'
 
       - name: Build APK with Buildozer
-        # No 'continue-on-error' here. We want a real success.
         run: |
           export PATH=$PATH:~/.local/bin
           export P4A_NO_BYTECODE_COMPILE=1
+          
+          # Force download of missing Android API components and accept licenses
+          # This is the "Magic" fix for the current error
+          yes | python3 -m buildozer android sdk_update
+          
+          # Now run the actual build
           python3 -m buildozer -v android debug --job 1
 
       - name: Manual Progress Save
