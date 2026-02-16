@@ -48,11 +48,11 @@ jobs:
           export PATH=$PATH:~/.local/bin
           export P4A_NO_BYTECODE_COMPILE=1
           
-          # Clean start - explicitly cleaning the android platform to fix NumPy paths
-          python3 -m buildozer android clean
+          # 1. CLEAN START: We use rm -rf instead of 'android clean' 
+          # This avoids the FileNotFoundError by removing the directory manually.
           rm -rf .buildozer/ bin/
           
-          # Final build command
+          # 2. RUN BUILD
           python3 -m buildozer -v android debug
 
       - name: Upload APK
