@@ -19,16 +19,12 @@ jobs:
 
       - name: Maximize Runner Disk Space
         run: |
-          echo "Before cleanup:"
-          df -h
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /opt/ghc
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
           sudo apt-get clean
-          echo "After cleanup:"
-          df -h
 
       - name: Configure Virtual Memory (8GB Swap)
         run: |
@@ -37,15 +33,12 @@ jobs:
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
-          free -h
 
       - name: Install System Dependencies
         run: |
           sudo apt-get update
-          
-          # CRITICAL FIX: Remove conflicting LLVM-14 libunwind to allow GStreamer installation
+          # FIX: Solve the libunwind-14-dev conflict for GStreamer
           sudo apt-get remove -y libunwind-14-dev || true
-          
           sudo apt-get install -y \
             build-essential libffi-dev libssl-dev ffmpeg \
             libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
@@ -57,7 +50,7 @@ jobs:
             libunwind-dev
           
           python -m pip install --upgrade pip
-          python -m pip install --user --upgrade buildozer "cython>=3.0.0" virtualenv wheel setuptools
+          python -m pip install --user --upgrade buildozer "cython<3.0" virtualenv wheel setuptools
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -67,15 +60,8 @@ jobs:
 
       - name: Build APK with Buildozer
         run: |
-          # Add local bin to path for buildozer
           export PATH=$PATH:~/.local/bin
-          
-          # Force clean any previous residues
-          rm -rf .buildozer/
-          rm -rf ~/.buildozer/
-          rm -rf bin/
-          
-          # Use 'python -m buildozer' to ensure it uses the installed python env
+          # No-byte-compile flags help skip unnecessary steps for large libraries like TFLite
           python3 -m buildozer -v android debug -- --no-byte-compile-python --no-compile-pyo
 
       - name: Upload APK
