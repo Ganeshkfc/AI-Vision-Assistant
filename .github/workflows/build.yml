@@ -21,7 +21,6 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .buildozer
-          # Using a unique key per run allows us to "stack" progress on each retry
           key: ${{ runner.os }}-buildozer-${{ github.run_id }}
           restore-keys: |
             ${{ runner.os }}-buildozer-
@@ -34,7 +33,6 @@ jobs:
       - name: Configure Massive Virtual Memory (16GB Swap)
         run: |
           sudo swapoff -a || true
-          # NumPy and TFLite require significantly more than 4GB during peak compilation
           sudo dd if=/dev/zero of=/swapfile bs=1M count=16384
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
@@ -54,15 +52,14 @@ jobs:
           java-version: '17'
 
       - name: Build APK with Buildozer
-        id: buildozer
-        continue-on-error: true
+        # Removed 'continue-on-error' so you know if it's truly done
         run: |
           export PATH=$PATH:~/.local/bin
           export P4A_NO_BYTECODE_COMPILE=1
-          # We no longer 'rm -rf .buildozer' here so we can resume from cache
+          # CRITICAL: We DO NOT delete .buildozer here anymore
           python3 -m buildozer -v android debug --job 1
 
-      - name: Manual Progress Save (Advanced Cache)
+      - name: Manual Progress Save
         if: always()
         uses: actions/cache/save@v4
         with:
@@ -70,8 +67,7 @@ jobs:
           key: ${{ runner.os }}-buildozer-${{ github.run_id }}
 
       - name: Upload APK
-        if: steps.buildozer.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: VisionApp-Output
+          name: VisionApp-Final-APK
           path: bin/*.apk
