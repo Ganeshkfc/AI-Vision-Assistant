@@ -17,7 +17,7 @@ if platform == 'android':
     from jnius import autoclass
     from android.permissions import request_permissions, Permission
 
-# Robust TFLite import for Android
+# Robust TFLite import
 try:
     import tflite_runtime.interpreter as tflite
 except ImportError:
@@ -39,7 +39,6 @@ class VisionApp(App):
         if platform == 'android':
             try:
                 PythonActivity = autoclass('org.kivy.android.PythonActivity')
-                Context = autoclass('android.content.Context')
                 self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
             except Exception as e:
                 print(f"TTS Initialization Error: {e}")
@@ -50,7 +49,6 @@ class VisionApp(App):
         self.interpreter = None
         if os.path.exists(model_path) and tflite:
             try:
-                # Use tflite.Interpreter for tflite_runtime
                 self.interpreter = tflite.Interpreter(model_path=model_path)
                 self.interpreter.allocate_tensors()
                 self.input_details = self.interpreter.get_input_details()
@@ -84,19 +82,26 @@ class VisionApp(App):
 
     def on_start(self):
         if platform == 'android':
-            request_permissions([
-                Permission.CAMERA,
-                Permission.READ_EXTERNAL_STORAGE,
-                Permission.WRITE_EXTERNAL_STORAGE
-            ], self.on_permission_result)
+            # Support for Android 13+ Media Permissions
+            from android.os import Build
+            perms = [Permission.CAMERA]
+            
+            if Build.VERSION.SDK_INT >= 33:
+                perms.append(Permission.READ_MEDIA_IMAGES)
+            else:
+                perms.append(Permission.READ_EXTERNAL_STORAGE)
+                perms.append(Permission.WRITE_EXTERNAL_STORAGE)
+                
+            request_permissions(perms, self.on_permission_result)
         else:
             self.start_camera()
 
     def on_permission_result(self, permissions, grants):
-        if all(grants):
+        # We start camera even if storage is denied, as long as camera is granted
+        if grants:
             self.start_camera()
         else:
-            self.speak("Camera permission required.")
+            self.speak("Permissions required to function.")
 
     def start_camera(self):
         Clock.schedule_once(lambda dt: self.preview.connect_camera(camera_id='back'), 0.5)
@@ -133,6 +138,7 @@ class VisionApp(App):
         if not self.interpreter:
             return
         try:
+            # AI Inference Logic
             frame = np.frombuffer(pixels, dtype=np.uint8).reshape((height, width, 4))
             rgb = frame[:, :, :3]
             img = Image.fromarray(rgb).resize((640, 640), Image.BILINEAR)
