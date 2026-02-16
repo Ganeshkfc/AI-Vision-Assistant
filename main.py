@@ -1,23 +1,19 @@
 __version__ = "1.0"
-
 import os
 import time
 import numpy as np
 from PIL import Image
-
 from kivy.app import App
 from kivy.uix.button import Button
 from kivy.uix.boxlayout import BoxLayout
 from kivy.clock import Clock
 from kivy.utils import platform
-
 from camera4kivy import Preview
 
 if platform == 'android':
     from jnius import autoclass
     from android.permissions import request_permissions, Permission
 
-# Robust TFLite import
 try:
     import tflite_runtime.interpreter as tflite
 except ImportError:
@@ -55,8 +51,6 @@ class VisionApp(App):
                 self.output_details = self.interpreter.get_output_details()
             except Exception as e:
                 print(f"Interpreter Error: {e}")
-        else:
-            print(f"CRITICAL: Model file not found at {model_path}")
 
         layout = BoxLayout(orientation='vertical')
         self.preview = Preview(aspect_ratio='16:9', enable_analyze_pixels=True)
@@ -77,21 +71,17 @@ class VisionApp(App):
         layout.add_widget(self.top_btn)
         layout.add_widget(self.preview)
         layout.add_widget(self.bottom_btn)
-
         return layout
 
     def on_start(self):
         if platform == 'android':
-            # Support for Android 13+ Media Permissions
             from android.os import Build
             perms = [Permission.CAMERA]
-            
             if Build.VERSION.SDK_INT >= 33:
                 perms.append(Permission.READ_MEDIA_IMAGES)
             else:
                 perms.append(Permission.READ_EXTERNAL_STORAGE)
                 perms.append(Permission.WRITE_EXTERNAL_STORAGE)
-                
             request_permissions(perms, self.on_permission_result)
         else:
             self.start_camera()
@@ -99,25 +89,23 @@ class VisionApp(App):
     def on_permission_result(self, permissions, grants):
         if grants:
             self.start_camera()
-        else:
-            self.speak("Permissions required to function.")
 
     def start_camera(self):
         Clock.schedule_once(lambda dt: self.preview.connect_camera(camera_id='back'), 0.5)
-        Clock.schedule_once(lambda dt: self.speak("AI vision Activated. Mode 1 active."), 1.5)
+        Clock.schedule_once(lambda dt: self.speak("AI vision Activated."), 1.5)
 
     def toggle_mode(self, instance):
         if self.current_mode == 1:
             self.current_mode = 2
-            self.speak("Mode 2 activated. Distance detection enabled.")
-            self.top_btn.text = "MODE 2 ACTIVE\n(Single Object + Distance)"
+            self.speak("Mode 2 activated.")
+            self.top_btn.text = "MODE 2 ACTIVE"
         else:
             self.current_mode = 1
-            self.speak("Mode 1 activated. Multiple object detection enabled")
-            self.top_btn.text = "MODE 1 ACTIVE\n(Multiple Objects)"
+            self.speak("Mode 1 activated.")
+            self.top_btn.text = "MODE 1 ACTIVE"
 
     def check_close_app(self, instance):
-        self.speak("Closing application. Thank you.")
+        self.speak("Closing application.")
         self.preview.disconnect_camera()
         Clock.schedule_once(lambda dt: self.stop(), 0.5)
 
@@ -134,22 +122,19 @@ class VisionApp(App):
         return (real_w * self.FOCAL_LENGTH) / max(width_px, 1)
 
     def analyze_frame(self, pixels, width, height, image_pos, image_size, texture):
-        if not self.interpreter:
-            return
+        if not self.interpreter: return
         try:
             frame = np.frombuffer(pixels, dtype=np.uint8).reshape((height, width, 4))
             rgb = frame[:, :, :3]
             img = Image.fromarray(rgb).resize((640, 640), Image.BILINEAR)
             input_data = np.expand_dims(np.array(img), axis=0).astype(np.float32) / 255.0
-            
             if self.input_details[0]['shape'][1] == 3:
                 input_data = np.transpose(input_data, (0, 3, 1, 2))
-                
             self.interpreter.set_tensor(self.input_details[0]['index'], input_data)
             self.interpreter.invoke()
             output = self.interpreter.get_tensor(self.output_details[0]['index'])[0]
             self.process_results(output, width, height)
-        except Exception as e:
+        except:
             pass
 
     def process_results(self, output, f_w, f_h):
