@@ -5,13 +5,13 @@ package.domain = org.aivision
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,tflite,txt
 
-# EXCLUSIONS: Critical to prevent the 30,000 file compilation loop that hangs runners
+# EXCLUSIONS: Critical to prevent the 30,000 file compilation loop
 source.exclude_dirs = tests, bin, venv, .venv, .git, .github, docs, examples, Lib/test, Lib/unittest
 source.exclude_patterns = license, README*, *.pyc, *.pyo, */test/*, */tests/*
 
 version = 1.0
 
-# REQUIREMENTS: Explicitly using numpy 1.26.4 for NDK compatibility
+# REQUIREMENTS: pinned numpy for stability
 requirements = python3, hostpython3, kivy, pyjnius, camera4kivy, gestures4kivy, android, numpy==1.26.4, pillow, sqlite3
 
 android.api = 34
@@ -23,7 +23,7 @@ android.enable_androidx = True
 android.archs = arm64-v8a
 android.allow_backup = False
 
-# SKIP COMPILATION: Keeps the build within GitHub's time limits
+# SKIP COMPILATION: keeps build within GitHub limits
 android.no_byte_compile_python = True
 
 [buildozer]
