@@ -5,13 +5,14 @@ package.domain = org.aivision
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,tflite,txt
 
-# CRITICAL: Exclude all test directories to prevent runner timeouts
+# CRITICAL: Strip out thousands of test files that cause the timeout
 source.exclude_dirs = tests, bin, venv, .venv, .git, .github, docs, examples, kivy/tests, kivy/tools
-source.exclude_patterns = license, README*, *test*, *Test*, tests/*, */tests/*, *.pyc, *.pyo
+source.exclude_patterns = license, README*, *test*, *Test*, tests/*, */tests/*, *.pyc, *.pyo, site-packages/numpy/tests
 
 version = 1.0
 requirements = python3, kivy==2.3.0, cython==0.29.33, camera4kivy, gestures4kivy, pyjnius, android, sqlite3
 
+# Android Configuration
 android.api = 34
 android.minapi = 21
 android.ndk = 25b
@@ -21,7 +22,7 @@ android.enable_androidx = True
 android.archs = arm64-v8a
 android.allow_backup = False
 
-# Optimized whitelist for essential libraries only
+# Essential libraries only to minimize package size
 android.whitelist = sqlite3, libffi, openssl
 
 [buildozer]
