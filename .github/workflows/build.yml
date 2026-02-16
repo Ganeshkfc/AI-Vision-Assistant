@@ -57,11 +57,9 @@ jobs:
           export PATH=$PATH:~/.local/bin
           export P4A_NO_BYTECODE_COMPILE=1
           
-          # Force download of missing Android API components and accept licenses
-          # This is the "Magic" fix for the current error
-          yes | python3 -m buildozer android sdk_update
-          
-          # Now run the actual build
+          # Use the correct buildozer command to start the build
+          # Buildozer will automatically handle SDK download and license acceptance
+          # because android.accept_sdk_license = True is set in buildozer.spec
           python3 -m buildozer -v android debug --job 1
 
       - name: Manual Progress Save
