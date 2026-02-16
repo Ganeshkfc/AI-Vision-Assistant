@@ -42,6 +42,10 @@ jobs:
       - name: Install System Dependencies
         run: |
           sudo apt-get update
+          
+          # CRITICAL FIX: Remove conflicting LLVM-14 libunwind to allow GStreamer installation
+          sudo apt-get remove -y libunwind-14-dev || true
+          
           sudo apt-get install -y \
             build-essential libffi-dev libssl-dev ffmpeg \
             libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
@@ -49,7 +53,8 @@ jobs:
             zlib1g-dev libgstreamer1.0-dev gstreamer1.0-plugins-base \
             gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
             patchelf wget unzip zip autoconf automake libtool gettext \
-            pkg-config libncurses5-dev libncursesw5-dev libtinfo5 cmake libsqlite3-dev
+            pkg-config libncurses5-dev libncursesw5-dev libtinfo5 cmake libsqlite3-dev \
+            libunwind-dev
           
           python -m pip install --upgrade pip
           python -m pip install --user --upgrade buildozer "cython>=3.0.0" virtualenv wheel setuptools
