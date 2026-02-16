@@ -22,10 +22,10 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc "/usr/local/share/boost" "$AGENT_TOOLSDIRECTORY"
           sudo apt-get clean
 
-      - name: Configure Virtual Memory (8GB Swap)
+      - name: Configure Virtual Memory (12GB Swap)
         run: |
           sudo swapoff -a || true
-          sudo dd if=/dev/zero of=/swapfile bs=1M count=8192
+          sudo dd if=/dev/zero of=/swapfile bs=1M count=12288
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
@@ -47,21 +47,14 @@ jobs:
       - name: Build APK with Buildozer
         run: |
           export PATH=$PATH:~/.local/bin
+          # Force the skipping of the compilation that hangs the runner
           export P4A_NO_BYTECODE_COMPILE=1
           
-          # 1. Clean old residues
+          # Clean start
           rm -rf .buildozer/ bin/
           
-          # 2. RUN RECIPES ONLY (This compiles Kivy/Python but doesn't package yet)
-          # This creates the folders we need to clean.
-          buildozer android p4a -- get-packages || true
-
-          # 3. SURGICAL STRIKE: Delete only the massive test libraries
-          # This removes the 28,000 files safely without deleting system configs.
-          find .buildozer/ -path "*/Lib/test" -type d -exec rm -rf {} + || true
-          find .buildozer/ -path "*/Lib/unittest" -type d -exec rm -rf {} + || true
-          
-          # 4. FINAL BUILD: Now that the weight is gone, finish the APK
+          # Run the build directly. With the 12GB Swap and P4A_NO_BYTECODE flag, 
+          # the runner can now handle the file count without a specialized script.
           python3 -m buildozer -v android debug -- --no-byte-compile-python --no-compile-pyo
 
       - name: Upload APK
