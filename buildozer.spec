@@ -5,9 +5,9 @@ package.domain = org.aivision
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,tflite,txt
 
-# Standard exclusions for your app source
+# Exclude only your app's temporary files
 source.exclude_dirs = tests, bin, venv, .venv, .git, .github, docs, examples
-source.exclude_patterns = license, README*, *.pyc, *.pyo
+source.exclude_patterns = license, README*, *.pyc, *.pyo, .buildozer/*
 
 version = 1.0
 requirements = python3, kivy==2.3.0, cython==0.29.33, camera4kivy, gestures4kivy, pyjnius, android, sqlite3
