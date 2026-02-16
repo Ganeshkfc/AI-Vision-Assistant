@@ -8,10 +8,10 @@ source.exclude_dirs = tests, bin, venv, .venv, .git, .github
 
 version = 1.0
 
-# Pinning versions is required to prevent the build from failing on new, incompatible updates
+# PINNED versions to ensure compatibility
 requirements = python3, hostpython3, kivy, pyjnius, camera4kivy, gestures4kivy, android, numpy==1.26.4, pillow, sqlite3, tflite-runtime, cython==0.29.37
 
-android.api = 34
+android.api = 33
 android.minapi = 24
 android.ndk = 25b
 android.ndk_api = 24
