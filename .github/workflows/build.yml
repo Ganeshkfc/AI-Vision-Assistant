@@ -48,11 +48,10 @@ jobs:
           export PATH=$PATH:~/.local/bin
           export P4A_NO_BYTECODE_COMPILE=1
           
-          # 1. CLEAN START: We use rm -rf instead of 'android clean' 
-          # This avoids the FileNotFoundError by removing the directory manually.
+          # Clean start: Only use rm -rf. Do NOT run 'buildozer android clean' here.
           rm -rf .buildozer/ bin/
           
-          # 2. RUN BUILD
+          # Run the build
           python3 -m buildozer -v android debug
 
       - name: Upload APK
