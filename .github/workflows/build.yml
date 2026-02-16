@@ -17,17 +17,8 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Cache Buildozer
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.buildozer
-            .buildozer
-            bin/
-          # Bumped to v17 to force a totally fresh start
-          key: ${{ runner.os }}-buildozer-v17-${{ hashFiles('buildozer.spec') }}
-          restore-keys: |
-            ${{ runner.os }}-buildozer-v17-
+      # CACHE REMOVED TEMPORARILY TO FIX CORRUPTION
+      # This ensures a 100% clean build environment
 
       - name: Install Dependencies
         run: |
@@ -40,7 +31,6 @@ jobs:
             gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
             patchelf wget unzip zip autoconf automake libtool gettext
           pip install --upgrade pip
-          # Explicitly install Cython 3.0.0 which Kivy 2.3.0 requires
           pip install buildozer "cython>=3.0.0" wheel setuptools
 
       - name: Setup Java
@@ -51,30 +41,24 @@ jobs:
 
       - name: Configure Virtual Memory (Swap)
         run: |
-          # Unlock and create emergency RAM
           sudo swapoff -a || true
           sudo dd if=/dev/zero of=/swapfile bs=1M count=4096
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
-          
-          # Free up disk space
           sudo rm -rf /usr/share/dotnet /opt/ghc "/usr/local/share/boost"
 
       - name: Build APK with Buildozer
         run: |
           export PATH=$PATH:~/.local/bin
-          unset ANDROID_NDK_HOME
-          unset ANDROID_NDK_ROOT
-          unset ANDROID_SDK_ROOT
+          # Ensure we are using the absolute latest p4a
+          pip install --upgrade python-for-android
           
-          # CRITICAL STEP: 
-          # We delete the 'platform' folder specifically. 
-          # This forces Buildozer to re-generate the C files using the new Cython.
-          rm -rf .buildozer/android/platform
+          # Force delete every single hidden build folder
+          rm -rf .buildozer/
+          rm -rf ~/.buildozer/
           rm -rf bin/
           
-          # Build with OOM-safe flags
           buildozer -v android debug -- --no-byte-compile-python --no-compile-pyo
 
       - name: Upload APK
