@@ -8,10 +8,10 @@ source.exclude_dirs = tests, bin, venv, .venv, .git, .github
 
 version = 1.0
 
-# Added 'sh' and kept cython pinned for stability
-requirements = python3, hostpython3, kivy, pyjnius, camera4kivy, gestures4kivy, android, numpy, pillow, sqlite3, tflite-runtime, cython==0.29.37, sh
+# Pinned cython for stability and removed manual numpy versioning
+requirements = python3, hostpython3, kivy, pyjnius, camera4kivy, gestures4kivy, android, numpy, pillow, sqlite3, tflite-runtime, cython==0.29.37
 
-# Using API 33 and NDK 25b for maximum compatibility with GitHub runners
+# API 33 is more reliable for automated CI environments
 android.api = 33
 android.minapi = 24
 android.ndk = 25b
