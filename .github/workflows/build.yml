@@ -17,6 +17,14 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Cache Buildozer
+        uses: actions/cache@v4
+        with:
+          path: .buildozer
+          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            ${{ runner.os }}-buildozer-
+
       - name: Maximize Runner Disk Space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc "/usr/local/share/boost" "$AGENT_TOOLSDIRECTORY"
@@ -46,13 +54,9 @@ jobs:
       - name: Build APK with Buildozer
         run: |
           export PATH=$PATH:~/.local/bin
-          # This variable tells the compiler to skip the slow bytecode stage
           export P4A_NO_BYTECODE_COMPILE=1
           
-          # Remove local build folders for a truly fresh start
-          rm -rf .buildozer/ bin/
-          
-          # Final build command
+          # We do NOT use rm -rf here anymore so the cache can work!
           python3 -m buildozer -v android debug
 
       - name: Upload APK
