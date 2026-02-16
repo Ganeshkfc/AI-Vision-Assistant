@@ -44,7 +44,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential libffi-dev libssl-dev ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly patchelf wget unzip zip autoconf automake libtool gettext pkg-config libncurses5-dev libncursesw5-dev libtinfo5 cmake libsqlite3-dev libunwind-dev
           python -m pip install --upgrade pip
-          python -m pip install --user --upgrade buildozer cython==0.29.37 virtualenv wheel setuptools sh
+          python -m pip install --user --upgrade buildozer cython==0.29.37 virtualenv wheel setuptools
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -54,15 +54,11 @@ jobs:
 
       - name: Build APK with Buildozer
         run: |
-          # Add local bin to path where buildozer is installed
           export PATH=$PATH:~/.local/bin
           export P4A_NO_BYTECODE_COMPILE=1
           
-          # Force a clean-up of any previous partial builds
-          rm -rf .buildozer/android/platform/build-arm64-v8a/
-          
-          # Run the build
-          python3 -m buildozer -v android debug --job 1
+          # FIX: Removed invalid 'sdk_update' and added automatic license acceptance
+          yes | python3 -m buildozer -v android debug --job 1
 
       - name: Manual Progress Save
         if: always()
