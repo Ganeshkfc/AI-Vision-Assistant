@@ -52,12 +52,16 @@ jobs:
           # 1. Clean old residues
           rm -rf .buildozer/ bin/
           
-          # 2. START BACKGROUND CLEANER
-          # This small script runs in the background and deletes the 28,000+ test files 
-          # as soon as they appear, keeping the runner fast and preventing the timeout.
-          (while true; do find .buildozer/ -path "*/Lib/test" -type d -exec rm -rf {} + 2>/dev/null; sleep 30; done) &
+          # 2. RUN RECIPES ONLY (This compiles Kivy/Python but doesn't package yet)
+          # This creates the folders we need to clean.
+          buildozer android p4a -- get-packages || true
+
+          # 3. SURGICAL STRIKE: Delete only the massive test libraries
+          # This removes the 28,000 files safely without deleting system configs.
+          find .buildozer/ -path "*/Lib/test" -type d -exec rm -rf {} + || true
+          find .buildozer/ -path "*/Lib/unittest" -type d -exec rm -rf {} + || true
           
-          # 3. RUN FULL BUILD
+          # 4. FINAL BUILD: Now that the weight is gone, finish the APK
           python3 -m buildozer -v android debug -- --no-byte-compile-python --no-compile-pyo
 
       - name: Upload APK
