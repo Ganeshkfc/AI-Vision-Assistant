@@ -5,16 +5,15 @@ package.domain = org.aivision
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,tflite,txt
 
-# AGGRESSIVE EXCLUSIONS: Keeps the build fast
+# Aggressive exclusions to keep the file count low
 source.exclude_dirs = tests, bin, venv, .venv, .git, .github, docs, examples, Lib/test, Lib/unittest
 source.exclude_patterns = license, README*, *.pyc, *.pyo, */test/*, */tests/*, */unittest/*, */lib-dynload/_test*, */__pycache__/*
 
 version = 1.0
 
-# REQUIREMENTS: Removed '==1.26.4' to fix the 404 Download Error
+# Using standard numpy to let Buildozer choose the best recipe
 requirements = python3, hostpython3, kivy, pyjnius, camera4kivy, gestures4kivy, android, numpy, pillow, sqlite3, tflite-runtime
 
-# PERMISSIONS: Critical for Camera and Storage access on Android
 android.permissions = CAMERA, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE, INTERNET
 
 android.api = 34
@@ -23,10 +22,12 @@ android.ndk = 25b
 android.ndk_api = 24
 android.accept_sdk_license = True
 android.enable_androidx = True
+
+# ONLY arm64-v8a to save 50% of build time
 android.archs = arm64-v8a
 android.allow_backup = False
 
-# SKIP COMPILATION: Prevents timeout
+# This is critical to prevent the runner from hanging on bytecode
 android.no_byte_compile_python = True
 
 [buildozer]
