@@ -11,13 +11,12 @@ source.exclude_patterns = license, README*, *.pyc, *.pyo, */test/*, */tests/*, *
 
 version = 1.0
 
-# ADDED cython to requirements for a smoother build
-requirements = python3,hostpython3,kivy,pyjnius,camera4kivy,gestures4kivy,android,numpy,pillow,sqlite3,tflite-runtime,cython
+# PINNED versions to ensure compatibility with Android NDK 25b
+requirements = python3, hostpython3, kivy, pyjnius, camera4kivy, gestures4kivy, android, numpy==1.26.4, pillow, sqlite3, tflite-runtime, cython==0.29.37
 
 android.permissions = CAMERA, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE, INTERNET
 
 android.api = 34
-# UPDATED to 24 (Required for modern NumPy/TFLite support)
 android.minapi = 24
 android.ndk = 25b
 android.ndk_api = 24
@@ -28,9 +27,9 @@ android.enable_androidx = True
 android.archs = arm64-v8a
 android.allow_backup = False
 
-# Critical to prevent runner timeout
+# Critical to prevent runner timeout during NumPy/TFLite install
 android.no_byte_compile_python = True
 
 [buildozer]
-log_level = 1
+log_level = 2
 warn_on_root = 1
