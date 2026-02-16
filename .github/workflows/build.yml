@@ -24,7 +24,6 @@ jobs:
           key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
             ${{ runner.os }}-buildozer-
-          # CRITICAL: This saves the build progress even if the job fails/times out
           save-always: true 
 
       - name: Maximize Runner Disk Space
@@ -35,7 +34,6 @@ jobs:
       - name: Configure Virtual Memory (4GB Swap)
         run: |
           sudo swapoff -a || true
-          # Reduced from 12GB to 4GB to save disk space for the build
           sudo dd if=/dev/zero of=/swapfile bs=1M count=4096 
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
@@ -58,8 +56,9 @@ jobs:
         run: |
           export PATH=$PATH:~/.local/bin
           export P4A_NO_BYTECODE_COMPILE=1
-          # DO NOT run rm -rf .buildozer here!
-          python3 -m buildozer -v android debug
+          
+          # Added --job 1 to prevent memory crashes during heavy compilation
+          python3 -m buildozer -v android debug --job 1
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
