@@ -7,10 +7,10 @@ source.include_exts = py,png,jpg,kv,atlas,tflite,txt
 
 # EXCLUSIONS: Stripping out all test folders to prevent the 30,000 file hang
 source.exclude_dirs = tests, bin, venv, .venv, .git, .github, docs, examples, Lib/test, Lib/unittest
-source.exclude_patterns = license, README*, *.pyc, *.pyo, */test/*, */tests/*, site-packages/numpy/tests
+source.exclude_patterns = license, README*, *.pyc, *.pyo, */test/*, */tests/*, */unittest/*, */lib-dynload/_test*
 
 version = 1.0
-requirements = python3, kivy==2.3.0, cython==0.29.33, camera4kivy, gestures4kivy, pyjnius, android, sqlite3
+requirements = python3c, kivy==2.3.0, cython==0.29.33, camera4kivy, gestures4kivy, pyjnius, android, sqlite3
 
 # Android Configuration
 android.api = 34
