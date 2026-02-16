@@ -5,23 +5,19 @@ import time
 import numpy as np
 from PIL import Image
 
-# --- KIVY COMPONENTS ---
 from kivy.app import App
 from kivy.uix.button import Button
 from kivy.uix.boxlayout import BoxLayout
 from kivy.clock import Clock
 from kivy.utils import platform
 
-# --- CAMERA4KIVY ---
 from camera4kivy import Preview
 
-# --- ANDROID SPECIFIC ---
 if platform == 'android':
     from jnius import autoclass
     from android.permissions import request_permissions, Permission
 
-# --- TFLITE RUNTIME ---
-# Improved import logic for robustness during the build process
+# Robust TFLite import for Android
 try:
     import tflite_runtime.interpreter as tflite
 except ImportError:
@@ -29,11 +25,9 @@ except ImportError:
         import tensorflow.lite as tflite
     except ImportError:
         tflite = None
-        print("TFLite not found")
 
 class VisionApp(App):
     def build(self):
-        # Your Original App Logic & Settings (Unchanged)
         self.current_mode = 1 
         self.KNOWN_WIDTHS = {'person': 50, 'chair': 45, 'bottle': 8, 'cell phone': 7}
         self.FOCAL_LENGTH = 715 
@@ -41,28 +35,31 @@ class VisionApp(App):
         self.SPEECH_COOLDOWN = 6 
         self.class_names = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
 
-        # Setup Android TTS with the correct Bootstrap path
         self.tts = None
         if platform == 'android':
             try:
                 PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                Context = autoclass('android.content.Context')
                 self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
             except Exception as e:
                 print(f"TTS Initialization Error: {e}")
 
-        # Path Fix for Android - Ensures model is found in the app folder
         cur_dir = os.path.dirname(os.path.abspath(__file__))
         model_path = os.path.join(cur_dir, "yolov8n_float32.tflite")
         
+        self.interpreter = None
         if os.path.exists(model_path) and tflite:
-            self.interpreter = tflite.Interpreter(model_path=model_path)
-            self.interpreter.allocate_tensors()
-            self.input_details = self.interpreter.get_input_details()
-            self.output_details = self.interpreter.get_output_details()
+            try:
+                # Use tflite.Interpreter for tflite_runtime
+                self.interpreter = tflite.Interpreter(model_path=model_path)
+                self.interpreter.allocate_tensors()
+                self.input_details = self.interpreter.get_input_details()
+                self.output_details = self.interpreter.get_output_details()
+            except Exception as e:
+                print(f"Interpreter Error: {e}")
         else:
-            print(f"CRITICAL: Model file not found or TFLite missing at {model_path}")
+            print(f"CRITICAL: Model file not found at {model_path}")
 
-        # Your GUI Layout (Unchanged)
         layout = BoxLayout(orientation='vertical')
         self.preview = Preview(aspect_ratio='16:9', enable_analyze_pixels=True)
         self.preview.analyze_pixels_callback = self.analyze_frame
@@ -86,7 +83,6 @@ class VisionApp(App):
         return layout
 
     def on_start(self):
-        # Request Android permissions properly on startup
         if platform == 'android':
             request_permissions([
                 Permission.CAMERA,
@@ -104,7 +100,7 @@ class VisionApp(App):
 
     def start_camera(self):
         Clock.schedule_once(lambda dt: self.preview.connect_camera(camera_id='back'), 0.5)
-        Clock.schedule_once(lambda dt: self.speak("AI vision Activated. Mode 1 active. Detecting multiple objects. To change mode. Tap your phone's top screen . To close the application. Tap on the bottom screen "), 1.5)
+        Clock.schedule_once(lambda dt: self.speak("AI vision Activated. Mode 1 active."), 1.5)
 
     def toggle_mode(self, instance):
         if self.current_mode == 1:
@@ -134,8 +130,9 @@ class VisionApp(App):
         return (real_w * self.FOCAL_LENGTH) / max(width_px, 1)
 
     def analyze_frame(self, pixels, width, height, image_pos, image_size, texture):
+        if not self.interpreter:
+            return
         try:
-            # AI Inference Logic
             frame = np.frombuffer(pixels, dtype=np.uint8).reshape((height, width, 4))
             rgb = frame[:, :, :3]
             img = Image.fromarray(rgb).resize((640, 640), Image.BILINEAR)
