@@ -10,13 +10,13 @@ version = 1.0
 orientation = portrait
 fullscreen = 0
 
-# REQUIREMENTS: Pinned Cython and organized for AI/Camera stability
-requirements = python3, kivy==2.3.0, cython==0.29.33, camera4kivy, gestures4kivy, pillow, pyjnius, numpy, tflite-runtime, android, sqlite3
+# REDUCED REQUIREMENTS: Minimum set for successful first build
+requirements = python3, kivy==2.3.0, cython==0.29.33, camera4kivy, gestures4kivy, pyjnius, android, sqlite3
 
 # CameraX and Provider Setup
 p4a.hook = camerax_provider/gradle_options.py
 
-# Android API & NDK Configuration (Updated for API 34 stability)
+# Android API & NDK Configuration
 android.api = 34
 android.minapi = 21
 android.ndk = 25b
@@ -24,17 +24,16 @@ android.ndk_api = 24
 android.accept_sdk_license = True
 android.enable_androidx = True
 
-# PERMISSIONS: Corrected and expanded for CameraX and TFLite
+# PERMISSIONS
 android.permissions = CAMERA, INTERNET, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE, WAKE_LOCK, RECORD_AUDIO
 android.wakelock = True
 
-# OPTIMIZATION: Build ONLY for 64-bit to prevent compilation timeouts
+# OPTIMIZATION: Single Architecture Only
 android.archs = arm64-v8a
 
-# Compilation Flags to prevent "implicit function declaration" errors in NDK 25b
+# Compilation Flags
 android.extra_cflags = -Wno-error=implicit-function-declaration -fno-lto
 
 [buildozer]
-# Level 1 prevents the GitHub log buffer from cutting off prematurely
 log_level = 1
 warn_on_root = 1
