@@ -5,11 +5,12 @@ package.domain = org.aivision
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,tflite,txt
 
-# Focus exclusions only on your project folders
-source.exclude_dirs = tests, bin, venv, .venv, .git, .github, docs, examples
-source.exclude_patterns = license, README*, *.pyc, *.pyo
+# CRITICAL: Added Lib/test and Lib/unittest directly to exclusions
+source.exclude_dirs = tests, bin, venv, .venv, .git, .github, docs, examples, Lib/test, Lib/unittest
+source.exclude_patterns = license, README*, *.pyc, *.pyo, */test/*, */tests/*
 
 version = 1.0
+# Added 'python3c' (the compact version) and removed heavy duplicates
 requirements = python3, kivy==2.3.0, cython==0.29.33, camera4kivy, gestures4kivy, pyjnius, android, sqlite3
 
 android.api = 34
