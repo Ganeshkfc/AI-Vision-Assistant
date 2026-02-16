@@ -24,16 +24,15 @@ jobs:
             ~/.buildozer
             .buildozer
             bin/
-          # Version 16: New cache for the Cython 3.0 upgrade
-          key: ${{ runner.os }}-buildozer-v16-${{ hashFiles('buildozer.spec') }}
+          # Bumped to v17 to force a totally fresh start
+          key: ${{ runner.os }}-buildozer-v17-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            ${{ runner.os }}-buildozer-v16-
+            ${{ runner.os }}-buildozer-v17-
 
       - name: Install Dependencies
         run: |
           sudo apt-get update
           sudo apt-get remove -y libunwind-14-dev || true
-          # Added 'gettext' to provide 'autopoint', which is required for libffi build
           sudo apt-get install -y libunwind-dev build-essential libffi-dev libssl-dev ffmpeg \
             libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
             libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev \
@@ -41,8 +40,8 @@ jobs:
             gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
             patchelf wget unzip zip autoconf automake libtool gettext
           pip install --upgrade pip
-          # REMOVED "cython<3.0" pin. Kivy 2.3.0 needs modern Cython.
-          pip install buildozer cython
+          # Explicitly install Cython 3.0.0 which Kivy 2.3.0 requires
+          pip install buildozer "cython>=3.0.0" wheel setuptools
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -50,23 +49,17 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Configure Virtual Memory
+      - name: Configure Virtual Memory (Swap)
         run: |
-          # 1. Force disable any existing swap to release the file lock
+          # Unlock and create emergency RAM
           sudo swapoff -a || true
-          
-          # 2. Use 'dd' instead of fallocate (more reliable for forcing file creation)
-          sudo dd if=/dev/zero of=/swapfile bs=1M count=4096 status=progress
-          
-          # 3. Secure and activate the new swap space
+          sudo dd if=/dev/zero of=/swapfile bs=1M count=4096
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
           
-          # 4. Clean up disk space to ensure we have room
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
+          # Free up disk space
+          sudo rm -rf /usr/share/dotnet /opt/ghc "/usr/local/share/boost"
 
       - name: Build APK with Buildozer
         run: |
@@ -75,12 +68,13 @@ jobs:
           unset ANDROID_NDK_ROOT
           unset ANDROID_SDK_ROOT
           
-          # Clean previous build artifacts to force a fresh Cython run
-          rm -rf .buildozer/
+          # CRITICAL STEP: 
+          # We delete the 'platform' folder specifically. 
+          # This forces Buildozer to re-generate the C files using the new Cython.
+          rm -rf .buildozer/android/platform
           rm -rf bin/
-          rm -rf ~/.buildozer/
           
-          # Final build attempt with memory-safe flags
+          # Build with OOM-safe flags
           buildozer -v android debug -- --no-byte-compile-python --no-compile-pyo
 
       - name: Upload APK
