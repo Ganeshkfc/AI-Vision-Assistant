@@ -75,8 +75,11 @@ jobs:
           rm -rf .buildozer/
           rm -rf ~/.buildozer/
           rm -rf bin/
+
+          # CRITICAL: Force P4A to skip the byte-compilation phase that causes timeouts
+          export P4A_NO_BYTECODE_COMPILE=1
           
-          # Use optimized flags to skip heavy byte-compilation that causes timeouts
+          # Run build with optimized flags
           python3 -m buildozer -v android debug -- --no-byte-compile-python --no-compile-pyo
 
       - name: Upload APK
