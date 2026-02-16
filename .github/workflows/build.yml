@@ -52,18 +52,16 @@ jobs:
           # 1. Clean old residues
           rm -rf .buildozer/ bin/
           
-          # 2. Run a partial build to download the recipes/source
-          # This might fail or stop, which is fine, we just need the folders created
-          timeout 5m buildozer android debug || true
+          # 2. Run build until the point of Python extraction
+          # We use a longer timeout here to ensure Python is fully ready
+          timeout 15m python3 -m buildozer -v android debug || true
           
-          # 3. NUCLEAR CLEANUP: Manually delete all test folders from the Python source
-          # This removes the 28,000+ files that are currently killing your build
-          find .buildozer/ -type d -name "test" -exec rm -rf {} + || true
-          find .buildozer/ -type d -name "tests" -exec rm -rf {} + || true
+          # 3. SMART CLEANUP: Only delete the massive internal Python test library
+          # This specifically targets the 28,000 files without breaking the build
+          find .buildozer/ -path "*/Lib/test" -type d -exec rm -rf {} + || true
           find .buildozer/ -type d -name "idlelib" -exec rm -rf {} + || true
-          find .buildozer/ -type d -name "pydoc_data" -exec rm -rf {} + || true
           
-          # 4. Final Build Attempt with strict flags
+          # 4. FINAL RESUME: This will skip the deleted files and finish the APK
           python3 -m buildozer -v android debug -- --no-byte-compile-python --no-compile-pyo
 
       - name: Upload APK
