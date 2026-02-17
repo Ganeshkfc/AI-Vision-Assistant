@@ -1,5 +1,4 @@
 name: Build APK
-
 on:
   push:
     branches: [ main ]
@@ -7,15 +6,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
-
     steps:
-      - name: Maximize Runner Disk Space
-        run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc "/usr/local/share/boost"
-          sudo docker image prune -a -f
-          sudo apt-get clean
-
       - uses: actions/checkout@v4
 
       - name: Setup Python
@@ -29,14 +20,6 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Cache Buildozer
-        uses: actions/cache@v4
-        with:
-          path: .buildozer
-          key: ${{ runner.os }}-buildozer-${{ github.run_id }}
-          restore-keys: |
-            ${{ runner.os }}-buildozer-
-
       - name: Install System Dependencies
         run: |
           sudo apt-get update
@@ -44,38 +27,17 @@ jobs:
             libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev \
             libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev \
             libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
-            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly patchelf wget unzip zip \
-            autoconf automake libtool gettext pkg-config libncurses5-dev libncursesw5-dev \
-            libtinfo5 cmake libsqlite3-dev libunwind-dev liblzma-dev
+            libncurses5-dev libncursesw5-dev cmake libsqlite3-dev
           python -m pip install --upgrade pip
           python -m pip install --user --upgrade buildozer cython==0.29.37 virtualenv wheel setuptools
 
-      - name: Configure Balanced Virtual Memory (7GB Swap)
-        run: |
-          sudo swapoff -a || true
-          sudo dd if=/dev/zero of=/swapfile bs=1M count=7168
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
-
-      - name: Build APK with Buildozer
+      - name: Build with Buildozer
         run: |
           export PATH=$PATH:~/.local/bin
-          export P4A_NO_BYTECODE_COMPILE=1
-          
-          # This command is now clean. No 'yes |' and no '--job 1'.
-          # android.accept_sdk_license = True in .spec handles the licenses.
           buildozer -v android debug
-
-      - name: Manual Progress Save
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: .buildozer
-          key: ${{ runner.os }}-buildozer-${{ github.run_id }}
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: VisionApp-Final
+          name: VisionApp-Fixed
           path: bin/*.apk
