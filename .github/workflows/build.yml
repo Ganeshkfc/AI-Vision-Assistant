@@ -62,13 +62,9 @@ jobs:
         run: |
           export PATH=$PATH:~/.local/bin
           export P4A_NO_BYTECODE_COMPILE=1
-          export ANDROID_HOME=$ANDROID_SDK_ROOT
-          export ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT
           
-          # Accept licenses using sdkmanager (cleaner than piping yes to buildozer)
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
-          
-          # FIX: Removed '--job 1' and 'yes |'. This was causing the "Unknown command 1" error.
+          # This command is now clean. No 'yes |' and no '--job 1'.
+          # android.accept_sdk_license = True in .spec handles the licenses.
           buildozer -v android debug
 
       - name: Manual Progress Save
