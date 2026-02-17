@@ -24,11 +24,19 @@ jobs:
       - name: Install System Dependencies
         run: |
           sudo apt-get update
-          # FIX: Remove the conflicting libunwind package and install the generic one
-          sudo apt-get remove -y libunwind-14-dev || true
+          
+          # 1. Aggressively remove conflicting pre-installed LLVM packages
+          # These are known to "hold" libunwind-dev in a broken state on GitHub Runners
+          sudo apt-get remove -y libunwind-14-dev libunwind-13-dev libunwind-12-dev || true
+          
+          # 2. Fix potential broken dependencies and clear cache
+          sudo apt-get autoremove -y
+          sudo apt-get clean
+          
+          # 3. Explicitly install the generic libunwind-dev first
           sudo apt-get install -y libunwind-dev
           
-          # Install Buildozer and Kivy dependencies
+          # 4. Install all other Buildozer and GStreamer dependencies
           sudo apt-get install -y \
             build-essential \
             libffi-dev \
@@ -48,7 +56,8 @@ jobs:
             zip \
             openjdk-17-jdk \
             python3-setuptools \
-            python3-pip
+            python3-pip \
+            python3-wheel
 
       - name: Build with Buildozer
         uses: ArtemSBulgakov/buildozer-action@v1
@@ -58,7 +67,8 @@ jobs:
           buildozer_version: master
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: package
+          name: AI-Vision-Assistant-${{ env.date }}
           path: ${{ steps.buildozer.outputs.filename }}
