@@ -34,7 +34,7 @@ orientation = portrait
 
 # (int) Target Android API, should be as high as possible.
 # API 34 is the current requirement for Google Play Store.
-android.api = 34
+android.api = 33
 
 # (int) Minimum API your APK will support.
 android.minapi = 21
