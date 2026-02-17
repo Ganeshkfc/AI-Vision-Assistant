@@ -7,7 +7,7 @@ source.include_exts = py,png,jpg,kv,atlas,tflite
 
 # (list) Application requirements
 # Added cython which is often needed for building numpy/pillow from source
-requirements = python3, kivy==2.3.0, pyjnius, camera4kivy, gestures4kivy, android, numpy, pillow, tflite-runtime, cython
+requirements = python3, kivy==2.3.0, pyjnius, camera4kivy, gestures4kivy, android, numpy, pillow, tflite-runtime, cython, hostpython3
 
 orientation = portrait
 fullscreen = 0
