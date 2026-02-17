@@ -9,6 +9,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Free Disk Space
+        run: |
+          sudo docker image prune --all --force
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -29,11 +34,14 @@ jobs:
             libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
             libncurses5-dev libncursesw5-dev cmake libsqlite3-dev
           python -m pip install --upgrade pip
-          python -m pip install --user --upgrade buildozer cython==0.29.37 virtualenv wheel setuptools
+          # Forced Cython version to 0.29.33 to avoid 'AttributeError' during build
+          python -m pip install --user --upgrade buildozer "cython<3.0" virtualenv wheel setuptools
 
       - name: Build with Buildozer
         run: |
           export PATH=$PATH:~/.local/bin
+          # Run a clean before building since you want a fresh start
+          buildozer android clean
           buildozer -v android debug
 
       - name: Upload APK
