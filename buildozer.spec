@@ -1,33 +1,31 @@
 [app]
 title = AI Vision Assistant
 package.name = aivisionassistant
-package.domain = org.aivision
+package.domain = org.test
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas,tflite,txt
-source.exclude_dirs = tests, bin, venv, .venv, .git, .github
-version = 1.0
+source.include_exts = py,png,jpg,kv,atlas,tflite
 
-# UPDATED: Hard-coded Cython to 0.29.33 to prevent common compilation errors
-requirements = python3, kivy==2.3.0, pyjnius, camera4kivy, gestures4kivy, android, numpy, pillow, tflite-runtime, cython==0.29.33
+# (list) Application requirements
+# Added cython which is often needed for building numpy/pillow from source
+requirements = python3, kivy==2.3.0, pyjnius, camera4kivy, gestures4kivy, android, numpy, pillow, tflite-runtime, cython
 
 orientation = portrait
-
-# Android specific
-android.api = 33
-android.minapi = 21
-android.ndk = 25b
-android.ndk_api = 21
-android.permissions = CAMERA, INTERNET, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
-android.private_storage = True
-android.accept_sdk_license = True
-
-# CRITICAL FOR CAMERA4KIVY
-android.enable_androidx = True
-
+fullscreen = 0
 android.archs = arm64-v8a
-android.no_byte_compile_python = True
+android.allow_backup = True
 
-# CHANGED: 'develop' branch is more stable for recent Android versions
+# (int) Target Android API
+android.api = 33
+# (int) Minimum Android API
+android.minapi = 21
+
+# (list) Permissions
+android.permissions = CAMERA, INTERNET, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
+
+# (str) The directory in which python-for-android should look for your own recipes
+# p4a.local_recipes = ./recipes
+
+# (str) python-for-android branch to use (develop is better for API 33+)
 p4a.branch = develop
 
 [buildozer]
