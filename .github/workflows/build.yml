@@ -1,4 +1,4 @@
-name: Build APK
+name: Build Android APK
 on:
   push:
     branches: [ main ]
@@ -9,38 +9,56 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+      - name: Get Date
+        id: get-date
+        run: |
+          echo "date=$(date -u '+%Y%m%d')" >> $GITHUB_ENV
+        shell: bash
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - name: Cache Buildozer global directory
+        uses: actions/cache@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          path: ~/.buildozer
+          key: buildozer-global-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
 
       - name: Install System Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libffi-dev libssl-dev ffmpeg libsdl2-dev \
-            libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev \
-            libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev \
-            libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
-            libncurses5-dev libncursesw5-dev cmake libsqlite3-dev
-          python -m pip install --upgrade pip
-          # Installing Cython first avoids 'AttributeError' during Buildozer setup
-          python -m pip install "cython<3.0" virtualenv wheel setuptools
-          python -m pip install buildozer
+          # FIX: Remove the conflicting libunwind package and install the generic one
+          sudo apt-get remove -y libunwind-14-dev || true
+          sudo apt-get install -y libunwind-dev
+          
+          # Install Buildozer and Kivy dependencies
+          sudo apt-get install -y \
+            build-essential \
+            libffi-dev \
+            libsqlite3-dev \
+            libssl-dev \
+            zlib1g-dev \
+            libgstreamer1.0-dev \
+            gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good \
+            libltdl-dev \
+            pkg-config \
+            autoconf \
+            automake \
+            libtool \
+            cmake \
+            unzip \
+            zip \
+            openjdk-17-jdk \
+            python3-setuptools \
+            python3-pip
 
       - name: Build with Buildozer
-        run: |
-          # The clean command ensures no leftover garbage from the previous failed run
-          buildozer android clean
-          buildozer -v android debug
+        uses: ArtemSBulgakov/buildozer-action@v1
+        id: buildozer
+        with:
+          command: buildozer android debug
+          buildozer_version: master
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: VisionApp-Final
-          path: bin/*.apk
+          name: package
+          path: ${{ steps.buildozer.outputs.filename }}
