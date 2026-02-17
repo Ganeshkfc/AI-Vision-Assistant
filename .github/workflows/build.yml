@@ -7,9 +7,16 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 400
+    timeout-minutes: 60 # 60 minutes is usually sufficient for Buildozer
 
     steps:
+      - name: Maximize Runner Disk Space
+        run: |
+          # Clean up unnecessary software to free space while PRESERVING Android SDK and Tool Cache
+          sudo rm -rf /usr/share/dotnet /opt/ghc "/usr/local/share/boost"
+          sudo docker image prune -a -f
+          sudo apt-get clean
+
       - uses: actions/checkout@v4
 
       - name: Setup Python
@@ -17,19 +24,33 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
       - name: Cache Buildozer
         uses: actions/cache@v4
         with:
           path: .buildozer
+          # Using run_id for saving but fallback for restoring
           key: ${{ runner.os }}-buildozer-${{ github.run_id }}
           restore-keys: |
             ${{ runner.os }}-buildozer-
 
-      - name: Maximize Runner Disk Space
+      - name: Install System Dependencies
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc "/usr/local/share/boost" "$AGENT_TOOLSDIRECTORY"
-          sudo docker image prune -a -f
-          sudo apt-get clean
+          sudo apt-get update
+          sudo apt-get install -y build-essential libffi-dev libssl-dev ffmpeg libsdl2-dev \
+            libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev \
+            libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev \
+            libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly patchelf wget unzip zip \
+            autoconf automake libtool gettext pkg-config libncurses5-dev libncursesw5-dev \
+            libtinfo5 cmake libsqlite3-dev libunwind-dev liblzma-dev
+          python -m pip install --upgrade pip
+          python -m pip install --user --upgrade buildozer cython==0.29.37 virtualenv wheel setuptools
 
       - name: Configure Balanced Virtual Memory (7GB Swap)
         run: |
@@ -39,26 +60,20 @@ jobs:
           sudo mkswap /swapfile
           sudo swapon /swapfile
 
-      - name: Install System Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential libffi-dev libssl-dev ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly patchelf wget unzip zip autoconf automake libtool gettext pkg-config libncurses5-dev libncursesw5-dev libtinfo5 cmake libsqlite3-dev libunwind-dev
-          python -m pip install --upgrade pip
-          python -m pip install --user --upgrade buildozer cython==0.29.37 virtualenv wheel setuptools
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
       - name: Build APK with Buildozer
         run: |
           export PATH=$PATH:~/.local/bin
           export P4A_NO_BYTECODE_COMPILE=1
           
-          # FIX: Removed invalid 'sdk_update' and added automatic license acceptance
-          yes | python3 -m buildozer -v android debug --job 1
+          # Point to the system-installed Android SDK to fix "API not available" errors
+          export ANDROID_HOME=$ANDROID_SDK_ROOT
+          export ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT
+          
+          # Automatically accept licenses for the system SDK components
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          
+          # Run buildozer (the 'yes |' handles buildozer-specific prompts)
+          yes | buildozer -v android debug --job 1
 
       - name: Manual Progress Save
         if: always()
