@@ -7,12 +7,11 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 60 # 60 minutes is usually sufficient for Buildozer
+    timeout-minutes: 60
 
     steps:
       - name: Maximize Runner Disk Space
         run: |
-          # Clean up unnecessary software to free space while PRESERVING Android SDK and Tool Cache
           sudo rm -rf /usr/share/dotnet /opt/ghc "/usr/local/share/boost"
           sudo docker image prune -a -f
           sudo apt-get clean
@@ -34,7 +33,6 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .buildozer
-          # Using run_id for saving but fallback for restoring
           key: ${{ runner.os }}-buildozer-${{ github.run_id }}
           restore-keys: |
             ${{ runner.os }}-buildozer-
@@ -64,16 +62,14 @@ jobs:
         run: |
           export PATH=$PATH:~/.local/bin
           export P4A_NO_BYTECODE_COMPILE=1
-          
-          # Point to the system-installed Android SDK to fix "API not available" errors
           export ANDROID_HOME=$ANDROID_SDK_ROOT
           export ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT
           
-          # Automatically accept licenses for the system SDK components
+          # Accept licenses using sdkmanager (cleaner than piping yes to buildozer)
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
           
-          # Run buildozer (the 'yes |' handles buildozer-specific prompts)
-          yes | buildozer -v android debug --job 1
+          # FIX: Removed '--job 1' and 'yes |'. This was causing the "Unknown command 1" error.
+          buildozer -v android debug
 
       - name: Manual Progress Save
         if: always()
