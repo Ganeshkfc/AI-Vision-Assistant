@@ -39,7 +39,6 @@ class VisionApp(App):
             except Exception as e:
                 print(f"TTS Initialization Error: {e}")
 
-        # Improved model path finding for Android
         cur_dir = os.path.dirname(os.path.abspath(__file__))
         model_path = os.path.join(cur_dir, "yolov8n_float32.tflite")
         
@@ -58,14 +57,14 @@ class VisionApp(App):
         self.preview.analyze_pixels_callback = self.analyze_frame
 
         self.top_btn = Button(
-            text="TAP TO CHANGE MODE\n(Mode 1: Multi-Object)",
-            background_color=(0.1, 0.5, 0.8, 1), font_size='18sp', size_hint_y=0.15, halign='center'
+            text="TAP HERE TO CHANGE MODE\n(Mode 1: Multi-Object Active)",
+            background_color=(0.1, 0.5, 0.8, 1), font_size='20sp', size_hint_y=0.2, halign='center'
         )
         self.top_btn.bind(on_release=self.toggle_mode)
 
         self.bottom_btn = Button(
-            text="EXIT APPLICATION",
-            background_color=(0.8, 0.2, 0.2, 1), font_size='18sp', size_hint_y=0.15, halign='center'
+            text="TAP HERE TO CLOSE APP",
+            background_color=(0.8, 0.2, 0.2, 1), font_size='20sp', size_hint_y=0.2, halign='center'
         )
         self.bottom_btn.bind(on_release=self.check_close_app)
 
@@ -90,38 +89,37 @@ class VisionApp(App):
     def on_permission_result(self, permissions, grants):
         if all(grants):
             self.start_camera()
-        else:
-            self.speak("Camera permission required.")
 
     def start_camera(self):
-        # Delayed connection to ensure UI is ready
-        Clock.schedule_once(lambda dt: self.preview.connect_camera(enable_analyze_pixels=True), 1)
-        Clock.schedule_once(lambda dt: self.speak("Vision System Ready."), 2)
+        Clock.schedule_once(lambda dt: self.preview.connect_camera(camera_id='back'), 0.5)
+        Clock.schedule_once(lambda dt: self.speak("AI vision Activated."), 1.5)
 
     def toggle_mode(self, instance):
         if self.current_mode == 1:
             self.current_mode = 2
-            self.speak("Mode 2: Distance sensing.")
-            self.top_btn.text = "MODE 2: DISTANCE"
+            self.speak("Mode 2 activated.")
+            self.top_btn.text = "MODE 2 ACTIVE"
         else:
             self.current_mode = 1
-            self.speak("Mode 1: Object detection.")
-            self.top_btn.text = "MODE 1: OBJECTS"
+            self.speak("Mode 1 activated.")
+            self.top_btn.text = "MODE 1 ACTIVE"
 
     def check_close_app(self, instance):
-        self.speak("Closing.")
-        try:
-            self.preview.disconnect_camera()
-        except:
-            pass
+        self.speak("Closing application.")
+        self.preview.disconnect_camera()
         Clock.schedule_once(lambda dt: self.stop(), 0.5)
 
     def speak(self, text):
         if self.tts:
             try:
+                self.tts.setSpeechRate(0.85) 
                 self.tts.speak(text, 0, None)
             except:
                 pass
+
+    def get_distance_cm(self, label, width_px):
+        real_w = self.KNOWN_WIDTHS.get(label, 30)
+        return (real_w * self.FOCAL_LENGTH) / max(width_px, 1)
 
     def analyze_frame(self, pixels, width, height, image_pos, image_size, texture):
         if not self.interpreter: return
@@ -130,17 +128,14 @@ class VisionApp(App):
             rgb = frame[:, :, :3]
             img = Image.fromarray(rgb).resize((640, 640), Image.BILINEAR)
             input_data = np.expand_dims(np.array(img), axis=0).astype(np.float32) / 255.0
-            
-            # Fix for different model input shapes
             if self.input_details[0]['shape'][1] == 3:
                 input_data = np.transpose(input_data, (0, 3, 1, 2))
-                
             self.interpreter.set_tensor(self.input_details[0]['index'], input_data)
             self.interpreter.invoke()
             output = self.interpreter.get_tensor(self.output_details[0]['index'])[0]
             self.process_results(output, width, height)
-        except Exception as e:
-            print(f"Analysis Error: {e}")
+        except:
+            pass
 
     def process_results(self, output, f_w, f_h):
         output = output.transpose() 
@@ -149,7 +144,7 @@ class VisionApp(App):
             row = output[i]
             scores = row[4:]
             class_id = np.argmax(scores)
-            if scores[class_id] > 0.5: # Higher confidence threshold
+            if scores[class_id] > 0.45:
                 xc, yc, w, h = row[:4]
                 x1 = (xc - w/2) * (f_w / 640)
                 x2 = (xc + w/2) * (f_w / 640)
@@ -163,9 +158,7 @@ class VisionApp(App):
                     self.speak("I see " + " and ".join(items))
                 else:
                     box = processed_boxes[0]
-                    # Simple distance calc
-                    real_w = self.KNOWN_WIDTHS.get(box['label'], 30)
-                    dist = (real_w * self.FOCAL_LENGTH) / max((box['x2'] - box['x1']), 1)
+                    dist = self.get_distance_cm(box['label'], box['x2'] - box['x1'])
                     self.speak(f"{box['label']} at {int(dist)} centimeters")
                 self.last_speech_time = now
 
