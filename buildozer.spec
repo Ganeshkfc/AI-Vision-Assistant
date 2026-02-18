@@ -5,7 +5,7 @@ package.domain = org.test
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,tflite
 
-# PINNED version of Cython is critical for Kivy 2.3.0
+# FIXED: Cython 0.29.33 is required for Kivy 2.3.0 to compile correctly
 requirements = python3, kivy==2.3.0, pyjnius, camera4kivy, gestures4kivy, android, numpy, pillow, tflite-runtime, cython==0.29.33, hostpython3
 
 orientation = portrait
@@ -15,14 +15,14 @@ android.permissions = CAMERA, INTERNET, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_ST
 android.api = 33
 android.minapi = 21
 
-# Automatically accept licenses to prevent the build from hanging
+# FIXED: Set to True for automated builds
 android.accept_sdk_license = True
 
-# Build for modern 64-bit devices (most common now)
+# Standard architecture for modern phones
 android.archs = arm64-v8a
 android.allow_backup = True
 
-# 'develop' branch is necessary for modern Android features and tflite
+# 'develop' branch is needed for modern Android tools
 p4a.branch = develop
 
 [buildozer]
