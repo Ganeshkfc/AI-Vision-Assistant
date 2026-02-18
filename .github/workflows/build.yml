@@ -24,7 +24,6 @@ jobs:
       - name: Install System Dependencies
         run: |
           sudo apt-get update
-          
           # Fix for conflicting LLVM packages on Ubuntu 22.04 runners
           sudo apt-get remove -y libunwind-* || true
           
@@ -53,12 +52,15 @@ jobs:
             libunwind-dev
 
       - name: Build with Buildozer
-        # Switching to the official Kivy action to fix the 'chown' user error
-        uses: kivy/buildozer-action@v1
+        # Corrected Action Path
+        uses: kivy/buildozer-action@master
         id: buildozer
         with:
           command: buildozer android debug
           buildozer_version: master
+        env:
+          # Ensures the Docker container uses the correct permissions
+          USER: root
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
