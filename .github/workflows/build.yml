@@ -52,14 +52,14 @@ jobs:
             libunwind-dev
 
       - name: Build with Buildozer
-        # Corrected Action Path
-        uses: kivy/buildozer-action@master
+        # FIXED: Corrected repository path and version
+        uses: kivy/buildozer-action@v1
         id: buildozer
         with:
           command: buildozer android debug
           buildozer_version: master
         env:
-          # Ensures the Docker container uses the correct permissions
+          # FIXED: Fixes the 'chown: invalid user: user' error
           USER: root
 
       - name: Upload APK
