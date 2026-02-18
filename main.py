@@ -88,7 +88,7 @@ class VisionApp(App):
             self.start_camera()
 
     def on_permission_result(self, permissions, grants):
-        # Updated: Check specifically for CAMERA permission index 0
+        # Updated: Check specifically for CAMERA  permission index 0
         if grants and grants[0]:
             self.start_camera()
 
