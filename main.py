@@ -57,7 +57,7 @@ class VisionApp(App):
         self.preview.analyze_pixels_callback = self.analyze_frame
 
         self.top_btn = Button(
-            text="TAP HERE TO CHANGE MODE\n(Mode 1: Multi-Object Active)",
+            text="TAP HERE TO CHANGE MODE\n(Mode 1 Active : Multi-Object Detection )",
             background_color=(0.1, 0.5, 0.8, 1), font_size='20sp', size_hint_y=0.2, halign='center'
         )
         self.top_btn.bind(on_release=self.toggle_mode)
@@ -101,22 +101,22 @@ class VisionApp(App):
     def _connect_camera(self, dt):
         try:
             self.preview.connect_camera(camera_id='back')
-            self.speak("AI vision Activated.")
+            self.speak("AI vision Activated.Mode 1 active. Detecting multiple objects. To change mode. Tap on your phone's top screen . To close the application . Tap on the bottom screen.")
         except Exception as e:
             print(f"Camera Connection Error: {e}")
 
     def toggle_mode(self, instance):
         if self.current_mode == 1:
             self.current_mode = 2
-            self.speak("Mode 2 activated.")
-            self.top_btn.text = "MODE 2 ACTIVE"
+            self.speak("Mode 2 activated.Detecting distance of the object.")
+            self.top_btn.text = "MODE 2 ACTIVE. Distance detection enabled"
         else:
             self.current_mode = 1
-            self.speak("Mode 1 activated.")
-            self.top_btn.text = "MODE 1 ACTIVE"
+            self.speak("Mode 1 activated.Detecting multiple objects and their diraction.")
+            self.top_btn.text = "MODE 1 ACTIVE. Multi-Object Detection enabled."
 
     def check_close_app(self, instance):
-        self.speak("Closing application.")
+        self.speak("Closing application.Thank you.")
         self.preview.disconnect_camera()
         Clock.schedule_once(lambda dt: self.stop(), 0.5)
 
