@@ -1,4 +1,5 @@
-name: Build Android APK
+name: Build APK
+
 on:
   push:
     branches: [ main ]
@@ -6,64 +7,72 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    timeout-minutes: 60
+
     steps:
+      - name: Maximize Runner Disk Space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc "/usr/local/share/boost"
+          sudo docker image prune -a -f
+          sudo apt-get clean
+
       - uses: actions/checkout@v4
 
-      - name: Get Date
-        id: get-date
-        run: |
-          echo "date=$(date -u '+%Y%m%d')" >> $GITHUB_ENV
-        shell: bash
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-      - name: Cache Buildozer global directory
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Cache Buildozer
         uses: actions/cache@v4
         with:
-          path: ~/.buildozer
-          key: buildozer-global-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          path: .buildozer
+          key: ${{ runner.os }}-buildozer-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-buildozer-
 
       - name: Install System Dependencies
         run: |
           sudo apt-get update
-          # Critical fix for LLVM package conflicts on Ubuntu 22.04 runners
-          sudo apt-get remove -y libunwind-* || true
-          
-          sudo apt-get install -y \
-            build-essential \
-            git \
-            libffi-dev \
-            libsqlite3-dev \
-            libssl-dev \
-            zlib1g-dev \
-            libgstreamer1.0-dev \
-            gstreamer1.0-plugins-base \
-            gstreamer1.0-plugins-good \
-            libltdl-dev \
-            pkg-config \
-            autoconf \
-            automake \
-            libtool \
-            cmake \
-            unzip \
-            zip \
-            openjdk-17-jdk \
-            python3-setuptools \
-            python3-pip \
-            python3-wheel \
-            libunwind-dev
+          sudo apt-get install -y build-essential libffi-dev libssl-dev ffmpeg libsdl2-dev \
+            libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev \
+            libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev \
+            libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly patchelf wget unzip zip \
+            autoconf automake libtool gettext pkg-config libncurses5-dev libncursesw5-dev \
+            libtinfo5 cmake libsqlite3-dev libunwind-dev liblzma-dev
+          python -m pip install --upgrade pip
+          python -m pip install --user --upgrade buildozer cython==0.29.37 virtualenv wheel setuptools
 
-      - name: Build with Buildozer
-        # UPDATED: Using @master ensures the repository is found by the runner
-        uses: kivy/buildozer-action@master
-        id: buildozer
+      - name: Configure Balanced Virtual Memory
+        run: |
+          sudo swapoff -a || true
+          sudo dd if=/dev/zero of=/swapfile bs=1M count=7168
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+
+      - name: Build APK with Buildozer
+        run: |
+          export PATH=$PATH:~/.local/bin
+          export P4A_NO_BYTECODE_COMPILE=1
+          buildozer -v android debug
+
+      - name: Manual Progress Save
+        if: always()
+        uses: actions/cache/save@v4
         with:
-          command: buildozer android debug
-          buildozer_version: master
-        env:
-          # FIXED: Prevents the 'chown: invalid user: user' error
-          USER: root
+          path: .buildozer
+          key: ${{ runner.os }}-buildozer-${{ github.run_id }}
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: package-${{ env.date }}
-          path: ${{ steps.buildozer.outputs.filename }}
+          name: VisionApp-Final
+          path: bin/*.apk
