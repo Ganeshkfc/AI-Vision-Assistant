@@ -8,7 +8,7 @@ source.exclude_dirs = tests, bin, venv, .venv, .git, .github
 version = 1.0
 
 # Added 'hostpython3' to requirements for better build stability
-requirements = python3, kivy==2.3.0, pyjnius, camera4kivy, gestures4kivy, android, numpy, pillow, tflite-runtime==2.14.0, hostpython3
+requirements = python3, kivy==2.3.0, pyjnius, camera4kivy, gestures4kivy, android, numpy, pillow, tflite-runtime, hostpython3
 
 orientation = portrait
 android.api = 33
