@@ -1,29 +1,31 @@
 [app]
 title = AI Vision Assistant
 package.name = aivisionassistant
-package.domain = org.test
+package.domain = org.aivision
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas,tflite
+source.include_exts = py,png,jpg,kv,atlas,tflite,txt
+source.exclude_dirs = tests, bin, venv, .venv, .git, .github
+version = 1.0
 
-# PINNED: Cython 0.29.33 is essential for Kivy 2.3.0 compilation success
-requirements = python3, kivy==2.3.0, pyjnius, camera4kivy, gestures4kivy, android, numpy, pillow, tflite-runtime, cython==0.29.33, hostpython3
+# Requirements: camera4kivy needs gestures4kivy and specific android libraries
+requirements = python3, kivy==2.3.0, pyjnius, camera4kivy, gestures4kivy, android, numpy, pillow, sqlite3, tflite-runtime
 
 orientation = portrait
-fullscreen = 0
-android.permissions = CAMERA, INTERNET, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
-
 android.api = 33
 android.minapi = 21
-
-# FIXED: Essential for automated CI/CD builds
+android.ndk = 25b
+android.ndk_api = 21
+android.permissions = CAMERA, INTERNET, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
+android.private_storage = True
 android.accept_sdk_license = True
 
-# Target architecture
-android.archs = arm64-v8a
-android.allow_backup = True
+# REQUIRED for Camera4Kivy
+android.enable_androidx = True
+p4a.hook = camerax_provider/gradle_options.py
 
-# 'develop' branch is recommended for latest Android API compatibility
-p4a.branch = develop
+android.archs = arm64-v8a
+android.no_byte_compile_python = True
+p4a.branch = master
 
 [buildozer]
 log_level = 2
