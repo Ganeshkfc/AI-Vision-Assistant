@@ -53,7 +53,6 @@ class VisionApp(App):
                 print(f"Interpreter Error: {e}")
 
         layout = BoxLayout(orientation='vertical')
-        # Updated: Initialize Preview with connect_on_start=False to prevent auto-connect
         self.preview = Preview(aspect_ratio='16:9', enable_analyze_pixels=True)
         self.preview.analyze_pixels_callback = self.analyze_frame
 
@@ -83,17 +82,20 @@ class VisionApp(App):
             else:
                 perms.append(Permission.READ_EXTERNAL_STORAGE)
                 perms.append(Permission.WRITE_EXTERNAL_STORAGE)
+            # Ask for permissions. on_permission_result will be called after user responds.
             request_permissions(perms, self.on_permission_result)
         else:
             self.start_camera()
 
     def on_permission_result(self, permissions, grants):
-        # Updated: Check specifically for CAMERA  permission index 0
-        if grants and grants[0]:
+        # Only start the camera if the user actually pressed "Allow"
+        if grants and all(grants):
             self.start_camera()
+        else:
+            self.speak("Camera permission is required to use this app.")
 
     def start_camera(self):
-        # Updated: Ensure camera connects only after a brief delay post-permission
+        # Connect camera with a slight delay to ensure Android window is ready
         Clock.schedule_once(self._connect_camera, 1)
 
     def _connect_camera(self, dt):
