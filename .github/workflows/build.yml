@@ -24,7 +24,7 @@ jobs:
       - name: Install System Dependencies
         run: |
           sudo apt-get update
-          # Fix for conflicting LLVM packages on Ubuntu 22.04 runners
+          # Critical fix for LLVM package conflicts on Ubuntu 22.04 runners
           sudo apt-get remove -y libunwind-* || true
           
           sudo apt-get install -y \
@@ -52,14 +52,14 @@ jobs:
             libunwind-dev
 
       - name: Build with Buildozer
-        # FIXED: Corrected repository path and version
-        uses: kivy/buildozer-action@v1
+        # FIXED: Correct path to the official Kivy action
+        uses: kivy/buildozer-action@v1.2.4
         id: buildozer
         with:
           command: buildozer android debug
           buildozer_version: master
         env:
-          # FIXED: Fixes the 'chown: invalid user: user' error
+          # FIXED: Prevents the 'chown: invalid user: user' error
           USER: root
 
       - name: Upload APK
