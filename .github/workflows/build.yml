@@ -7,15 +7,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
-
     steps:
-      - name: Maximize Runner Disk Space
-        run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc "/usr/local/share/boost"
-          sudo docker image prune -a -f
-          sudo apt-get clean
-
       - uses: actions/checkout@v4
 
       - name: Setup Python
@@ -29,11 +21,12 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # FIXED CACHE: This will now actually remember your progress
       - name: Cache Buildozer
         uses: actions/cache@v4
         with:
           path: .buildozer
-          key: ${{ runner.os }}-buildozer-${{ github.run_id }}
+          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
             ${{ runner.os }}-buildozer-
 
@@ -47,16 +40,9 @@ jobs:
             libltdl-dev pkg-config autoconf automake libtool cmake \
             libsqlite3-dev libunwind-dev liblzma-dev
           python -m pip install --upgrade pip
-          python -m pip install --user --upgrade buildozer cython==0.29.37 virtualenv wheel setuptools
+          python -m pip install --user --upgrade buildozer cython==0.29.37 virtualenv wheel
 
-      - name: Build APK with Buildozer
+      - name: Build APK
         run: |
           export PATH=$PATH:~/.local/bin
-          # Force buildozer to use the pinned cython version
           buildozer -v android debug
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: VisionApp-Final
-          path: bin/*.apk
