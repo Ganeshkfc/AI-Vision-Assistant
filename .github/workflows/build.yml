@@ -53,11 +53,11 @@ jobs:
             libunwind-dev
 
       - name: Build with Buildozer
-        uses: ArtemSBulgakov/buildozer-action@v1
+        # Switching to the official Kivy action to fix the 'chown' user error
+        uses: kivy/buildozer-action@v1
         id: buildozer
         with:
-          # Use 'yes |' to automatically type "y" for all license prompts
-          command: yes | buildozer android debug
+          command: buildozer android debug
           buildozer_version: master
 
       - name: Upload APK
