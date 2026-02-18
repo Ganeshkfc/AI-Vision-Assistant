@@ -46,3 +46,10 @@ jobs:
         run: |
           export PATH=$PATH:~/.local/bin
           buildozer -v android debug
+
+      # NEW: This uploads the APK so you can download it from the Actions tab
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Vision-Assistant-APK
+          path: bin/*.apk
