@@ -53,6 +53,7 @@ class VisionApp(App):
                 print(f"Interpreter Error: {e}")
 
         layout = BoxLayout(orientation='vertical')
+        # Updated: Initialize Preview with connect_on_start=False to prevent auto-connect
         self.preview = Preview(aspect_ratio='16:9', enable_analyze_pixels=True)
         self.preview.analyze_pixels_callback = self.analyze_frame
 
@@ -87,12 +88,20 @@ class VisionApp(App):
             self.start_camera()
 
     def on_permission_result(self, permissions, grants):
-        if all(grants):
+        # Updated: Check specifically for CAMERA permission index 0
+        if grants and grants[0]:
             self.start_camera()
 
     def start_camera(self):
-        Clock.schedule_once(lambda dt: self.preview.connect_camera(camera_id='back'), 0.5)
-        Clock.schedule_once(lambda dt: self.speak("AI vision Activated."), 1.5)
+        # Updated: Ensure camera connects only after a brief delay post-permission
+        Clock.schedule_once(self._connect_camera, 1)
+
+    def _connect_camera(self, dt):
+        try:
+            self.preview.connect_camera(camera_id='back')
+            self.speak("AI vision Activated.")
+        except Exception as e:
+            print(f"Camera Connection Error: {e}")
 
     def toggle_mode(self, instance):
         if self.current_mode == 1:
