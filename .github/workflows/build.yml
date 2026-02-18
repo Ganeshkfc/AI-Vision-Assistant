@@ -52,8 +52,8 @@ jobs:
             libunwind-dev
 
       - name: Build with Buildozer
-        # FIXED: Correct path to the official Kivy action
-        uses: kivy/buildozer-action@v1.2.4
+        # UPDATED: Using @master ensures the repository is found by the runner
+        uses: kivy/buildozer-action@master
         id: buildozer
         with:
           command: buildozer android debug
