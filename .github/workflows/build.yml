@@ -21,6 +21,14 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Cache Buildozer Data
+        uses: actions/cache@v4
+        with:
+          path: .buildozer
+          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            ${{ runner.os }}-buildozer-
+
       - name: Install System Dependencies
         run: |
           sudo apt-get update
@@ -31,22 +39,19 @@ jobs:
             libltdl-dev pkg-config autoconf automake libtool cmake \
             libsqlite3-dev libunwind-dev liblzma-dev
           python -m pip install --upgrade pip
-          python -m pip install --user --upgrade buildozer cython==0.29.37 virtualenv wheel
+          # FIXED: Updated Cython to 3.0.0 for Kivy 2.3.0/Python 3.11 compatibility
+          python -m pip install --user --upgrade buildozer "cython>=3.0.0" virtualenv wheel
 
-      # --- NEW STEP ADDED HERE ---
       - name: Install/Update camerax_provider
         run: |
           rm -rf camerax_provider
           git clone https://github.com/Android-for-Python/camerax_provider.git
           rm -rf camerax_provider/.git
 
-      - name: Debug File Path (Check Java Files)
-        run: |
-          ls -R camerax_provider/
-
       - name: Build APK
         run: |
           export PATH=$PATH:~/.local/bin
+          # The first build with caching will still take time, but the next ones will be fast
           buildozer -v android debug
           
       - name: Upload APK
