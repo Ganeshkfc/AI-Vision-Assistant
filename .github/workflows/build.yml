@@ -39,7 +39,7 @@ jobs:
             libltdl-dev pkg-config autoconf automake libtool cmake \
             libsqlite3-dev libunwind-dev liblzma-dev
           python -m pip install --upgrade pip
-          # FIXED: Updated Cython to 3.0.0 for Kivy 2.3.0/Python 3.11 compatibility
+          # FIXED: Cython 3.0+ is REQUIRED for Python 3.11/Kivy 2.3.0
           python -m pip install --user --upgrade buildozer "cython>=3.0.0" virtualenv wheel
 
       - name: Install/Update camerax_provider
@@ -51,7 +51,6 @@ jobs:
       - name: Build APK
         run: |
           export PATH=$PATH:~/.local/bin
-          # The first build with caching will still take time, but the next ones will be fast
           buildozer -v android debug
           
       - name: Upload APK
