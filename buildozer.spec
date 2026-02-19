@@ -3,7 +3,7 @@ title = AI Vision Assistant
 package.name = aivisionassistant
 package.domain = org.aivision
 source.dir = .
-# ADDED 'java' to include_exts to ensure CameraX.java is seen
+# Included 'java' to ensure CameraX.java is compiled into the APK
 source.include_exts = py,png,jpg,kv,atlas,tflite,txt,java
 source.exclude_dirs = tests, bin, venv, .venv, .git, .github
 version = 1.0
@@ -21,13 +21,14 @@ android.accept_sdk_license = True
 
 # --- CRITICAL FIXES FOR CAMERA & TFLITE CONFLICTS ---
 android.enable_androidx = True
+# This hook connects your Python code to the Android Camera hardware
 p4a.hook = camerax_provider/gradle_options.py
 
-# NEW: This is the missing link that tells Buildozer to compile your new Java files
+# This tells Buildozer to compile your new Java files
 android.add_src = camerax_provider/camerax_src
 
-# FIX for duplicate library errors
-android.gradle_options = "packagingOptions { pickFirst 'lib/*/librestrited_xyz.so'; exclude 'META-INF/INDEX.LIST' }"
+# FIXED: Standard fix for duplicate libc++_shared.so errors between TFLite and CameraX
+android.gradle_options = "packagingOptions { pickFirst 'lib/arm64-v8a/libc++_shared.so'; pickFirst 'lib/armeabi-v7a/libc++_shared.so'; exclude 'META-INF/INDEX.LIST' }"
 
 android.add_gradle_repositories = "https://maven.google.com"
 # ----------------------------------------------------
