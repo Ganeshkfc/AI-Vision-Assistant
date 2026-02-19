@@ -1,4 +1,3 @@
-__version__ = "1.0"
 import os
 import time
 import numpy as np
@@ -37,8 +36,10 @@ class VisionApp(App):
 
         layout = BoxLayout(orientation='vertical')
         
-        # SAFETY: Initialize Preview with connect_on_start=False
-        self.preview = Preview(aspect_ratio='16:9', enable_analyze_pixels=True, connect_on_start=False)
+        # FIX: Initialize Preview first, then set properties to avoid the TypeError
+        self.preview = Preview(aspect_ratio='16:9')
+        self.preview.enable_analyze_pixels = True
+        self.preview.connect_on_start = False
         self.preview.analyze_pixels_callback = self.analyze_frame
 
         self.top_btn = Button(
@@ -59,7 +60,6 @@ class VisionApp(App):
         return layout
 
     def on_start(self):
-        # 1. Safely Initialize TTS on Android
         if platform == 'android':
             try:
                 PythonActivity = autoclass('org.kivy.android.PythonActivity')
@@ -67,12 +67,11 @@ class VisionApp(App):
             except Exception as e:
                 print(f"TTS Initialization Error: {e}")
 
-        # 2. Schedule TFLite Model Loading to happen after the UI is visible
         Clock.schedule_once(self.load_model, 0.5)
 
-        # 3. Handle Permissions
         if platform == 'android':
             from android.os import Build
+            # Permissions for Camera and Storage
             perms = [Permission.CAMERA]
             if Build.VERSION.SDK_INT >= 33:
                 perms.append(Permission.READ_MEDIA_IMAGES)
@@ -84,7 +83,6 @@ class VisionApp(App):
             self.start_camera()
 
     def load_model(self, dt):
-        # SAFETY: Moving the high-risk Interpreter load out of the build() method
         cur_dir = os.path.dirname(os.path.abspath(__file__))
         model_path = os.path.join(cur_dir, "yolov8n_float32.tflite")
         
@@ -95,37 +93,36 @@ class VisionApp(App):
                 self.input_details = self.interpreter.get_input_details()
                 self.output_details = self.interpreter.get_output_details()
             except Exception as e:
-                print(f"Late Interpreter Load Error: {e}")
+                print(f"Model Load Error: {e}")
 
     def on_permission_result(self, permissions, grants):
         if grants and all(grants):
             self.start_camera()
         else:
-            self.speak("Camera permission is required to use this app.")
+            self.speak("Camera permission is required.")
 
     def start_camera(self):
-        # Connect camera with a slight delay to ensure Android window is ready
         Clock.schedule_once(self._connect_camera, 1)
 
     def _connect_camera(self, dt):
         try:
             self.preview.connect_camera(camera_id='back')
-            self.speak("AI vision Activated.Mode 1 active. Detecting multiple objects. To change mode. Tap on your phone's top screen . To close the application . Tap on the bottom screen.")
+            self.speak("AI vision Activated. Mode 1 active.")
         except Exception as e:
             print(f"Camera Connection Error: {e}")
 
     def toggle_mode(self, instance):
         if self.current_mode == 1:
             self.current_mode = 2
-            self.speak("Mode 2 activated.Detecting distance of the object.")
+            self.speak("Mode 2 activated. Detecting distance.")
             self.top_btn.text = "MODE 2 ACTIVE. Distance detection enabled"
         else:
             self.current_mode = 1
-            self.speak("Mode 1 activated.Detecting multiple objects and their diraction.")
+            self.speak("Mode 1 activated. Detecting objects.")
             self.top_btn.text = "MODE 1 ACTIVE. Multi-Object Detection enabled."
 
     def check_close_app(self, instance):
-        self.speak("Closing application.Thank you.")
+        self.speak("Closing application.")
         self.preview.disconnect_camera()
         Clock.schedule_once(lambda dt: self.stop(), 0.5)
 
