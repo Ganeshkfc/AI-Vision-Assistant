@@ -2,17 +2,17 @@ package org.kivy.camerax;
 
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageProxy;
-import org.kivy.camerax.CallbackWrapper;
+import androidx.annotation.NonNull;
 
 public class ImageAnalysisAnalyzer implements ImageAnalysis.Analyzer {
-
     private CallbackWrapper callback_wrapper;
 
-    public ImageAnalysisAnalyzer(CallbackWrapper callback_wrapper) {	
-	this.callback_wrapper = callback_wrapper;
+    public ImageAnalysisAnalyzer(CallbackWrapper callback_wrapper) {    
+        this.callback_wrapper = callback_wrapper;
     }
 
-    public void analyze(ImageProxy image) {
-	this.callback_wrapper.callback_image(image); 
+    @Override
+    public void analyze(@NonNull ImageProxy image) {
+        this.callback_wrapper.callback_image(image); 
     }
 }
