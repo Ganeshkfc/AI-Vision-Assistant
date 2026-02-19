@@ -33,6 +33,13 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install --user --upgrade buildozer cython==0.29.37 virtualenv wheel
 
+      # --- NEW STEP ADDED HERE ---
+      - name: Install/Update camerax_provider
+        run: |
+          rm -rf camerax_provider
+          git clone https://github.com/Android-for-Python/camerax_provider.git
+          rm -rf camerax_provider/.git
+
       - name: Debug File Path (Check Java Files)
         run: |
           ls -R camerax_provider/
