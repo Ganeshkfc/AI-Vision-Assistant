@@ -7,14 +7,17 @@ source.include_exts = py,png,jpg,kv,atlas,tflite,txt,java
 source.exclude_dirs = tests, bin, venv, .venv, .git, .github
 version = 1.0
 
-# UPDATED: Cython 3.0+ is handled by the workflow, requirements here are for the APK
-requirements = python3, kivy==2.3.0, pyjnius, camera4kivy, gestures4kivy, android, numpy, pillow, tflite-runtime, hostpython3
+# UPDATED: Cleaned requirements. 
+# NOTE: tflite-runtime is very difficult to build; if this fails again, 
+# we may need a custom recipe for it.
+requirements = python3, kivy==2.3.0, pyjnius, camera4kivy, gestures4kivy, android, numpy, pillow, tflite-runtime
 
 orientation = portrait
 android.api = 33
-android.minapi = 21
+# FIXED: Increased to 24 to support Python 3.11 and resolve 'endgrent' errors
+android.minapi = 24
 android.ndk = 25b
-android.ndk_api = 21
+android.ndk_api = 24
 
 android.permissions = CAMERA, INTERNET, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE, READ_MEDIA_IMAGES
 android.private_storage = True
