@@ -70,10 +70,13 @@ class VisionApp(App):
         Clock.schedule_once(self.load_model, 0.5)
 
         if platform == 'android':
-            from android.os import Build
+            # FIXED: Replaced 'from android.os import Build' with autoclass
+            Build = autoclass('android.os.Build')
+            VERSION = autoclass('android.os.Build$VERSION')
+            
             # Permissions for Camera and Storage
             perms = [Permission.CAMERA]
-            if Build.VERSION.SDK_INT >= 33:
+            if VERSION.SDK_INT >= 33:
                 perms.append(Permission.READ_MEDIA_IMAGES)
             else:
                 perms.append(Permission.READ_EXTERNAL_STORAGE)
