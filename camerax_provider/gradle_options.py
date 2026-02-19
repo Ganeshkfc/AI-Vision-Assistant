@@ -1,5 +1,5 @@
 #
-# Add gradle options for CameraX
+# Add gradle options for  CameraX
 #
 from pythonforandroid.recipe import  info
 from os.path import dirname, join, exists
