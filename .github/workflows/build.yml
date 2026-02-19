@@ -21,7 +21,6 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # FIXED CACHE: This will now actually remember your progress
       - name: Cache Buildozer
         uses: actions/cache@v4
         with:
@@ -42,12 +41,17 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install --user --upgrade buildozer cython==0.29.37 virtualenv wheel
 
+      # NEW: Fix permissions for the hook script
+      - name: Set Permissions
+        run: chmod +x camerax_provider/gradle_options.py || true
+
       - name: Build APK
         run: |
           export PATH=$PATH:~/.local/bin
+          # Force clean build to ensure Java classes are re-indexed
+          buildozer android clean
           buildozer -v android debug
 
-      # NEW: This uploads the APK so you can download it from the Actions tab
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
