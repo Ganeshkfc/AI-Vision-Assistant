@@ -24,6 +24,7 @@ except ImportError:
 
 class VisionApp(App):
     def build(self):
+        # Initializing variables
         self.current_mode = 1 
         self.KNOWN_WIDTHS = {'person': 50, 'chair': 45, 'bottle': 8, 'cell phone': 7}
         self.FOCAL_LENGTH = 715 
@@ -32,28 +33,12 @@ class VisionApp(App):
         self.class_names = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
 
         self.tts = None
-        if platform == 'android':
-            try:
-                PythonActivity = autoclass('org.kivy.android.PythonActivity')
-                self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
-            except Exception as e:
-                print(f"TTS Initialization Error: {e}")
-
-        cur_dir = os.path.dirname(os.path.abspath(__file__))
-        model_path = os.path.join(cur_dir, "yolov8n_float32.tflite")
-        
         self.interpreter = None
-        if os.path.exists(model_path) and tflite:
-            try:
-                self.interpreter = tflite.Interpreter(model_path=model_path)
-                self.interpreter.allocate_tensors()
-                self.input_details = self.interpreter.get_input_details()
-                self.output_details = self.interpreter.get_output_details()
-            except Exception as e:
-                print(f"Interpreter Error: {e}")
 
         layout = BoxLayout(orientation='vertical')
-        self.preview = Preview(aspect_ratio='16:9', enable_analyze_pixels=True)
+        
+        # SAFETY: Initialize Preview with connect_on_start=False
+        self.preview = Preview(aspect_ratio='16:9', enable_analyze_pixels=True, connect_on_start=False)
         self.preview.analyze_pixels_callback = self.analyze_frame
 
         self.top_btn = Button(
@@ -74,6 +59,18 @@ class VisionApp(App):
         return layout
 
     def on_start(self):
+        # 1. Safely Initialize TTS on Android
+        if platform == 'android':
+            try:
+                PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
+            except Exception as e:
+                print(f"TTS Initialization Error: {e}")
+
+        # 2. Schedule TFLite Model Loading to happen after the UI is visible
+        Clock.schedule_once(self.load_model, 0.5)
+
+        # 3. Handle Permissions
         if platform == 'android':
             from android.os import Build
             perms = [Permission.CAMERA]
@@ -82,13 +79,25 @@ class VisionApp(App):
             else:
                 perms.append(Permission.READ_EXTERNAL_STORAGE)
                 perms.append(Permission.WRITE_EXTERNAL_STORAGE)
-            # Ask for permissions. on_permission_result will be called after user responds.
             request_permissions(perms, self.on_permission_result)
         else:
             self.start_camera()
 
+    def load_model(self, dt):
+        # SAFETY: Moving the high-risk Interpreter load out of the build() method
+        cur_dir = os.path.dirname(os.path.abspath(__file__))
+        model_path = os.path.join(cur_dir, "yolov8n_float32.tflite")
+        
+        if os.path.exists(model_path) and tflite:
+            try:
+                self.interpreter = tflite.Interpreter(model_path=model_path)
+                self.interpreter.allocate_tensors()
+                self.input_details = self.interpreter.get_input_details()
+                self.output_details = self.interpreter.get_output_details()
+            except Exception as e:
+                print(f"Late Interpreter Load Error: {e}")
+
     def on_permission_result(self, permissions, grants):
-        # Only start the camera if the user actually pressed "Allow"
         if grants and all(grants):
             self.start_camera()
         else:
