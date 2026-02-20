@@ -76,13 +76,19 @@ jobs:
 
       - name: Increase Virtual Memory (Swap)
         run: |
+          # Turn off swap if it's already active to avoid "Text file busy"
+          sudo swapoff /swapfile || true
+          
+          # Create a 4GB swap file
           sudo fallocate -l 4G /swapfile
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
+          
+          # Set swappiness and check memory
           sudo sysctl vm.swappiness=10
           free -h
-
+          
       - name: Build APK
         run: |
           export PATH=$PATH:~/.local/bin
