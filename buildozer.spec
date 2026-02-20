@@ -7,7 +7,7 @@ source.include_exts = py,png,jpg,kv,atlas,tflite,txt,java
 source.exclude_dirs = tests, bin, venv, .venv, .git, .github
 version = 1.0
 
-# UPDATED: Removed hostpython3 (buildozer adds it automatically)
+# UPDATED: Removed hostpython3 (buildozer adds it  automatically)
 requirements = python3, kivy==2.3.0, pyjnius, camera4kivy, gestures4kivy, android, numpy, pillow, tflite-runtime
 
 orientation = portrait
