@@ -46,7 +46,6 @@ jobs:
             libdb-dev \
             uuid-dev \
             libltdl-dev \
-            libunwind-dev \
             pkg-config \
             autoconf \
             automake \
