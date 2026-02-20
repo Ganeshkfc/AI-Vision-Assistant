@@ -37,9 +37,9 @@ jobs:
             libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev \
             libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
             libltdl-dev pkg-config autoconf automake libtool cmake \
-            libsqlite3-dev libunwind-dev liblzma-dev
+            libsqlite3-dev libunwind-dev liblzma-dev uuid-dev
           python -m pip install --upgrade pip
-          # FIXED: Updated to Cython 3.0+ for Python 3.11/Kivy 2.3.0
+          # Ensure you are using Cython 3.0+ for Python 3.11 compatibility
           python -m pip install --user --upgrade buildozer "cython>=3.0.0" virtualenv wheel
 
       - name: Debug File Path (Check Java Files)
