@@ -25,8 +25,8 @@ android.accept_sdk_license = True
 
 # --- CAMERA & TFLITE INTEGRATION ---
 android.enable_androidx = True
-p4a.hook = camerax_provider
-android.add_src = camerax_provider/camerax_src
+p4a.hook = camerax_provider-main/gradle_options.py
+android.add_src = camerax_provider-main/camerax_src
 
 android.gradle_options = "packagingOptions { pickFirst 'lib/arm64-v8a/libc++_shared.so'; pickFirst 'lib/armeabi-v7a/libc++_shared.so'; pickFirst 'lib/x86/libc++_shared.so'; pickFirst 'lib/x86_64/libc++_shared.so'; exclude 'META-INF/INDEX.LIST' }"
 android.add_gradle_repositories = "https://maven.google.com"
