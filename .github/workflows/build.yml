@@ -67,7 +67,7 @@ jobs:
             gstreamer1.0-plugins-base \
             gstreamer1.0-plugins-good
           python -m pip install --upgrade pip
-          python -m pip install --user --upgrade buildozer "cython>=3.0.0" virtualenv wheel
+          python -m pip install --user --upgrade buildozer "cython<3.0.0" virtualenv wheel
           
       - name: Debug File Path (Check Java Files)
         run: |
