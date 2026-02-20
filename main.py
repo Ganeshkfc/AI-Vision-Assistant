@@ -7,6 +7,7 @@ from kivy.uix.button import Button
 from kivy.uix.boxlayout import BoxLayout
 from kivy.clock import Clock
 from kivy.utils import platform
+from kivy.logger import Logger
 from camera4kivy import Preview
 
 if platform == 'android':
@@ -20,6 +21,7 @@ except ImportError:
         import tensorflow.lite as tflite
     except ImportError:
         tflite = None
+        Logger.error("TFLite module not found!")
 
 class VisionApp(App):
     def build(self):
@@ -29,6 +31,7 @@ class VisionApp(App):
         self.FOCAL_LENGTH = 715 
         self.last_speech_time = 0
         self.SPEECH_COOLDOWN = 6 
+        
         self.class_names = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
 
         self.tts = None
@@ -36,7 +39,7 @@ class VisionApp(App):
 
         layout = BoxLayout(orientation='vertical')
         
-        # FIX: Initialize Preview first, then set properties to avoid the TypeError
+        # Initialize Preview first
         self.preview = Preview(aspect_ratio='16:9')
         self.preview.enable_analyze_pixels = True
         self.preview.connect_on_start = False
@@ -63,14 +66,15 @@ class VisionApp(App):
         if platform == 'android':
             try:
                 PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                # Initialize TTS with None for listener; Android handles it asynchronously
                 self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
             except Exception as e:
-                print(f"TTS Initialization Error: {e}")
+                Logger.error(f"TTS Initialization Error: {e}")
 
+        # Load the AI model
         Clock.schedule_once(self.load_model, 0.5)
 
         if platform == 'android':
-            # FIXED: Replaced 'from android.os import Build' with autoclass
             Build = autoclass('android.os.Build')
             VERSION = autoclass('android.os.Build$VERSION')
             
@@ -81,6 +85,8 @@ class VisionApp(App):
             else:
                 perms.append(Permission.READ_EXTERNAL_STORAGE)
                 perms.append(Permission.WRITE_EXTERNAL_STORAGE)
+            
+            # Request permissions and wait for user response
             request_permissions(perms, self.on_permission_result)
         else:
             self.start_camera()
@@ -95,13 +101,19 @@ class VisionApp(App):
                 self.interpreter.allocate_tensors()
                 self.input_details = self.interpreter.get_input_details()
                 self.output_details = self.interpreter.get_output_details()
+                Logger.info("Model Loaded Successfully!")
             except Exception as e:
-                print(f"Model Load Error: {e}")
+                Logger.error(f"Model Load Error: {e}")
+        else:
+            Logger.error(f"Model file not found at: {model_path} OR tflite missing")
 
     def on_permission_result(self, permissions, grants):
-        if grants and all(grants):
+        # FIX: Android grants returns 0 (which is False in python) when PERMISSION IS GRANTED
+        if grants and all(g == 0 or g is True for g in grants):
+            Logger.info("Permissions granted by user.")
             self.start_camera()
         else:
+            Logger.error("Permissions denied by user.")
             self.speak("Camera permission is required.")
 
     def start_camera(self):
@@ -110,9 +122,12 @@ class VisionApp(App):
     def _connect_camera(self, dt):
         try:
             self.preview.connect_camera(camera_id='back')
-            self.speak("AI vision Activated. Mode 1 active.")
+            Logger.info("Camera Connected Successfully")
+            
+            # Delay the first speech slightly so the TTS engine has time to initialize
+            Clock.schedule_once(lambda x: self.speak("AI vision Activated. Mode 1 active."), 2)
         except Exception as e:
-            print(f"Camera Connection Error: {e}")
+            Logger.error(f"Camera Connection Error: {e}")
 
     def toggle_mode(self, instance):
         if self.current_mode == 1:
@@ -133,37 +148,54 @@ class VisionApp(App):
         if self.tts:
             try:
                 self.tts.setSpeechRate(0.85) 
+                # QUEUE_FLUSH is 0 in Android SDK
                 self.tts.speak(text, 0, None)
-            except:
-                pass
+            except Exception as e:
+                Logger.warning(f"TTS Speech Error: {e}")
 
     def get_distance_cm(self, label, width_px):
         real_w = self.KNOWN_WIDTHS.get(label, 30)
         return (real_w * self.FOCAL_LENGTH) / max(width_px, 1)
 
     def analyze_frame(self, pixels, width, height, image_pos, image_size, texture):
-        if not self.interpreter: return
+        if not self.interpreter: 
+            return
+
         try:
+            # FIX: Safety check to prevent shape mismatch crashes
+            expected_size = width * height * 4
+            if len(pixels) != expected_size:
+                Logger.warning(f"Buffer size mismatch: Expected {expected_size}, got {len(pixels)}")
+                return
+
             frame = np.frombuffer(pixels, dtype=np.uint8).reshape((height, width, 4))
             rgb = frame[:, :, :3]
+            
             img = Image.fromarray(rgb).resize((640, 640), Image.BILINEAR)
             input_data = np.expand_dims(np.array(img), axis=0).astype(np.float32) / 255.0
+            
             if self.input_details[0]['shape'][1] == 3:
                 input_data = np.transpose(input_data, (0, 3, 1, 2))
+                
             self.interpreter.set_tensor(self.input_details[0]['index'], input_data)
             self.interpreter.invoke()
             output = self.interpreter.get_tensor(self.output_details[0]['index'])[0]
+            
             self.process_results(output, width, height)
-        except:
-            pass
+            
+        except Exception as e:
+            # FIX: Properly log the error instead of silently passing
+            Logger.error(f"Analyze Frame Error: {e}")
 
     def process_results(self, output, f_w, f_h):
         output = output.transpose() 
         processed_boxes = []
+        
         for i in range(output.shape[0]):
             row = output[i]
             scores = row[4:]
             class_id = np.argmax(scores)
+            
             if scores[class_id] > 0.45:
                 xc, yc, w, h = row[:4]
                 x1 = (xc - w/2) * (f_w / 640)
