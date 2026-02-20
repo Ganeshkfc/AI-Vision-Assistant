@@ -32,7 +32,7 @@ jobs:
       - name: Install System Dependencies
         run: |
           sudo apt-get update
-          # Remove conflicting libunwind packages first to avoid "held broken packages" error
+          # Force remove conflicting libunwind packages to fix "held broken packages" error
           sudo apt-get remove -y libunwind-14-dev libunwind-dev || true
           sudo apt-get install -y \
             build-essential \
@@ -67,7 +67,6 @@ jobs:
             gstreamer1.0-plugins-good
           python -m pip install --upgrade pip
           python -m pip install --user --upgrade buildozer "cython>=3.0.0" virtualenv wheel
-
       - name: Debug File Path (Check Java Files)
         run: |
           # Ensuring we are looking in the right folder
