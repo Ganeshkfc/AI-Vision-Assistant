@@ -32,12 +32,38 @@ jobs:
       - name: Install System Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libffi-dev libssl-dev ffmpeg libsdl2-dev \
-            libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev \
-            libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev \
-            libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
-            libltdl-dev pkg-config autoconf automake libtool cmake \
-            libsqlite3-dev libunwind-dev liblzma-dev uuid-dev
+          sudo apt-get install -y \
+            build-essential \
+            libffi-dev \
+            libssl-dev \
+            libsqlite3-dev \
+            zlib1g-dev \
+            liblzma-dev \
+            libbz2-dev \
+            libreadline-dev \
+            libncursesw5-dev \
+            libgdbm-dev \
+            libdb-dev \
+            uuid-dev \
+            libltdl-dev \
+            libunwind-dev \
+            pkg-config \
+            autoconf \
+            automake \
+            libtool \
+            cmake \
+            ffmpeg \
+            libsdl2-dev \
+            libsdl2-image-dev \
+            libsdl2-mixer-dev \
+            libsdl2-ttf-dev \
+            libportmidi-dev \
+            libswscale-dev \
+            libavformat-dev \
+            libavcodec-dev \
+            libgstreamer1.0-dev \
+            gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good
           python -m pip install --upgrade pip
           python -m pip install --user --upgrade buildozer "cython>=3.0.0" virtualenv wheel
 
