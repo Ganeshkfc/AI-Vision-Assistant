@@ -91,21 +91,18 @@ jobs:
 
           # ... (previous steps: Setup Java, Cache, etc.) ...
 
-      - name: Setup Android SDK
+      - name: Setup Android SDK API 33
         run: |
-          # 1. Accept all Android licenses
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
-          # 2. Ensure API 33 and Build Tools are installed
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-33" "build-tools;33.0.0" "ndk;25.2.9519653"
 
       - name: Build APK
         run: |
           export PATH=$PATH:~/.local/bin
-          # Tell Buildozer exactly where the pre-installed SDK and NDK are
-          buildozer android debug
+          buildozer -v android debug
         env:
-          ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
-          ANDROID_NDK_ROOT: ${{ env.ANDROID_HOME }}/ndk/25.2.9519653
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+          ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/25.2.9519653
 
       # ... (Upload APK step) ...
           
