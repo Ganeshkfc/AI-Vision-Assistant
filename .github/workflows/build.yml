@@ -93,8 +93,13 @@ jobs:
 
       - name: Setup Android SDK API 33
         run: |
+          # 1. Accept licenses
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+          # 2. Install required components
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-33" "build-tools;33.0.0" "ndk;25.2.9519653"
+          # 3. FIX: Create symlink so Buildozer finds sdkmanager where it expects it
+          sudo mkdir -p /usr/local/lib/android/sdk/tools/bin
+          sudo ln -s /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager /usr/local/lib/android/sdk/tools/bin/sdkmanager
 
       - name: Build APK
         run: |
