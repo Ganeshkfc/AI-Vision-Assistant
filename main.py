@@ -47,7 +47,7 @@ class BBoxOverlay(Widget):
                 class_id = int(valid_class_ids[i])
                 label_name = class_names[class_id]
 
-                # FIX: Convert numpy values to standard Python floats to avoid the crash
+                # FIX: Convert numpy values to standard Python floats to avoid the  crash
                 xc, yc, w, h = map(float, box[:4])
                 
                 scale_x = pw / 640.0
