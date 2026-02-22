@@ -25,7 +25,6 @@ except ImportError:
         import tensorflow.lite as tflite
     except ImportError:
         tflite = None
-        Logger.error("TFLite module not found!")
 
 class BBoxOverlay(Widget):
     def __init__(self, **kwargs):
@@ -47,21 +46,16 @@ class BBoxOverlay(Widget):
                 class_id = int(valid_class_ids[i])
                 label_name = class_names[class_id]
 
-                # FIX: Convert numpy values to standard Python floats to avoid the  crash
                 xc, yc, w, h = map(float, box[:4])
+                scale_x, scale_y = pw / 640.0, ph / 640.0
                 
-                scale_x = pw / 640.0
-                scale_y = ph / 640.0
-                
-                w_px = w * scale_x
-                h_px = h * scale_y
+                w_px, h_px = w * scale_x, h * scale_y
                 x1_px = px + ((xc - w/2) * scale_x)
                 y1_px = py + ph - ((yc + h/2) * scale_y) 
 
                 Color(0, 1, 0, 1) 
                 Line(rectangle=(x1_px, y1_px, w_px, h_px), width=2)
 
-                # Create label with safe float coordinates
                 lbl = Label(text=label_name, pos=(float(x1_px), float(y1_px + h_px)), 
                             size_hint=(None, None), size=(150, 40), color=(0,1,0,1))
                 self.add_widget(lbl)
@@ -70,10 +64,10 @@ class BBoxOverlay(Widget):
 class VisionApp(App):
     def build(self):
         self.current_mode = 1 
-        self.KNOWN_WIDTHS = {'person': 50, 'chair': 45, 'bottle': 8, 'cell phone': 7}
+        self.KNOWN_WIDTHS = {'person': 50, 'chair': 45, 'bottle': 8, 'cell phone': 7, 'cup': 10}
         self.FOCAL_LENGTH = 715 
         self.last_speech_time = 0
-        self.SPEECH_COOLDOWN = 4 
+        self.SPEECH_COOLDOWN = 5 # Adjusted for longer sentences
         
         self.class_names = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
 
@@ -82,8 +76,8 @@ class VisionApp(App):
 
         layout = BoxLayout(orientation='vertical')
         self.top_btn = Button(
-            text="TAP HERE TO CHANGE MODE\n(Mode 1: Detection Active)",
-            background_color=(0.1, 0.5, 0.8, 1), font_size='20sp', size_hint_y=0.15, halign='center'
+            text="MODE 1: MULTI-DETECTION\n(Tap to switch)",
+            background_color=(0.1, 0.5, 0.8, 1), font_size='18sp', size_hint_y=0.15, halign='center'
         )
         self.top_btn.bind(on_release=self.toggle_mode)
 
@@ -91,14 +85,14 @@ class VisionApp(App):
         self.preview = Preview(aspect_ratio='16:9')
         self.preview.enable_analyze_pixels = True
         self.preview.analyze_pixels_callback = self.analyze_frame
-        
         self.overlay = BBoxOverlay()
+        
         self.camera_container.add_widget(self.preview)
         self.camera_container.add_widget(self.overlay)
 
         self.bottom_btn = Button(
-            text="TAP HERE TO CLOSE APP",
-            background_color=(0.8, 0.2, 0.2, 1), font_size='20sp', size_hint_y=0.15, halign='center'
+            text="EXIT APPLICATION",
+            background_color=(0.8, 0.2, 0.2, 1), font_size='18sp', size_hint_y=0.12
         )
         self.bottom_btn.bind(on_release=self.check_close_app)
 
@@ -112,14 +106,13 @@ class VisionApp(App):
             try:
                 PythonActivity = autoclass('org.kivy.android.PythonActivity')
                 self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
-                Clock.schedule_once(lambda dt: self.tts.setSpeechRate(0.7) if self.tts else None, 1.5)
+                Clock.schedule_once(lambda dt: self.tts.setSpeechRate(0.85) if self.tts else None, 1.5)
             except Exception as e:
-                Logger.error(f"TTS Initialization Error: {e}")
+                Logger.error(f"TTS Error: {e}")
 
         Clock.schedule_once(self.load_model, 0.5)
         if platform == 'android':
-            perms = [Permission.CAMERA, Permission.RECORD_AUDIO]
-            request_permissions(perms, self.on_permission_result)
+            request_permissions([Permission.CAMERA], self.on_permission_result)
         else:
             self.start_camera()
 
@@ -127,67 +120,41 @@ class VisionApp(App):
         cur_dir = os.path.dirname(os.path.abspath(__file__))
         model_path = os.path.join(cur_dir, "yolov8n_float32.tflite")
         if os.path.exists(model_path) and tflite:
-            try:
-                self.interpreter = tflite.Interpreter(model_path=model_path)
-                self.interpreter.allocate_tensors()
-                self.input_details = self.interpreter.get_input_details()
-                self.output_details = self.interpreter.get_output_details()
-                Logger.info("MODEL: Loaded Successfully!")
-            except Exception as e:
-                Logger.error(f"MODEL: Load Error: {e}")
+            self.interpreter = tflite.Interpreter(model_path=model_path)
+            self.interpreter.allocate_tensors()
+            self.input_details = self.interpreter.get_input_details()
+            self.output_details = self.interpreter.get_output_details()
+            Logger.info("MODEL: Loaded Successfully!")
 
     def on_permission_result(self, permissions, grants):
-        if all(grants):
-            self.start_camera()
+        if all(grants): self.start_camera()
 
     def start_camera(self):
-        Clock.schedule_once(self._connect_camera, 1)
-
-    def _connect_camera(self, dt):
-        try:
-            self.preview.connect_camera(camera_id='back', enable_analyze_pixels=True)
-            Clock.schedule_once(lambda x: self.speak("Vision Activated"), 2)
-        except Exception as e:
-            Logger.error(f"CAMERA: Error {e}")
+        Clock.schedule_once(lambda dt: self.preview.connect_camera(camera_id='back'), 1)
 
     def toggle_mode(self, instance):
         self.current_mode = 2 if self.current_mode == 1 else 1
-        msg = "Mode 2: Distance" if self.current_mode == 2 else "Mode 1: Detection"
+        msg = "Mode 2: Distance" if self.current_mode == 2 else "Mode 1: Multi-Detection"
         self.speak(msg)
-        self.top_btn.text = f"TAP TO CHANGE MODE\n({msg} Active)"
+        self.top_btn.text = f"{msg.upper()}\n(Tap to switch)"
 
     def check_close_app(self, instance):
-        self.speak("Closing")
+        self.speak("Closing application")
         self.preview.disconnect_camera()
         Clock.schedule_once(lambda dt: self.stop(), 0.5)
 
     def speak(self, text):
         if self.tts:
-            try:
-                self.tts.speak(text, 0, None)
-            except:
-                pass
-
-    def get_distance_cm(self, label, width_px, frame_w):
-        real_w = self.KNOWN_WIDTHS.get(label, 30)
-        return (real_w * self.FOCAL_LENGTH) / max(width_px, 1)
+            try: self.tts.speak(text, 0, None)
+            except: pass
 
     def analyze_frame(self, pixels, *args):
-        if not self.interpreter:
-            return
-
+        if not self.interpreter: return
         try:
-            if isinstance(args[0], (list, tuple)):
-                width, height = args[0]
-            else:
-                width = args[0]
-                height = args[1]
-
+            width, height = args[0] if isinstance(args[0], (list, tuple)) else (args[0], args[1])
             channels = len(pixels) // (width * height)
             frame = np.frombuffer(pixels, dtype=np.uint8).reshape((height, width, channels))
-            rgb = frame[:, :, :3] 
-            
-            img = Image.fromarray(rgb).resize((640, 640))
+            img = Image.fromarray(frame[:, :, :3]).resize((640, 640))
             input_data = np.expand_dims(np.array(img), axis=0).astype(np.float32) / 255.0
             
             if self.input_details[0]['shape'][1] == 3: 
@@ -195,12 +162,10 @@ class VisionApp(App):
                 
             self.interpreter.set_tensor(self.input_details[0]['index'], input_data)
             self.interpreter.invoke()
-            output = self.interpreter.get_tensor(self.output_details[0]['index'])[0]
+            output = self.interpreter.get_tensor(self.output_details[0]['index'])[0].transpose()
             
-            output = output.transpose() 
             scores = np.max(output[:, 4:], axis=1)
-            # Threshold lowered to 0.35 for better detection
-            mask = scores > 0.35 
+            mask = scores > 0.40
             
             if np.any(mask):
                 valid_boxes = output[mask]
@@ -208,31 +173,49 @@ class VisionApp(App):
                 valid_class_ids = np.argmax(valid_boxes[:, 4:], axis=1)
                 
                 sort_idx = np.argsort(valid_scores)[::-1]
-                top_k = min(5, len(sort_idx))
+                num_to_process = 3 if self.current_mode == 1 else 1
+                top_k = min(num_to_process, len(sort_idx))
+                
                 best_boxes = valid_boxes[sort_idx][:top_k]
                 best_classes = valid_class_ids[sort_idx][:top_k]
                 
                 Clock.schedule_once(lambda dt: self.overlay.draw_boxes(best_boxes, best_classes, self.class_names, self.preview), 0)
                 
-                top_label = self.class_names[int(best_classes[0])]
                 now = time.time()
                 if now - self.last_speech_time > self.SPEECH_COOLDOWN:
                     if self.current_mode == 1:
-                        self.speak(f"I see a {top_label}")
+                        # Logic for Multi-Object and Direction
+                        descriptions = []
+                        for i in range(len(best_boxes)):
+                            label = self.class_names[int(best_classes[i])]
+                            xc = best_boxes[i][0]
+                            # Determine Direction
+                            if xc < 213: direction = "on your left"
+                            elif xc > 426: direction = "on your right"
+                            else: direction = "in front of you"
+                            descriptions.append(f"{label} {direction}")
+                        
+                        full_sentence = "I see a " + ", and a ".join(descriptions)
+                        self.speak(full_sentence)
                     else:
+                        # Logic for Mode 2: Single Object + Smart Distance
+                        label = self.class_names[int(best_classes[0])]
                         xc, yc, w, h = best_boxes[0][:4]
                         width_px = w * (width / 640)
-                        dist = self.get_distance_cm(top_label, width_px, width)
-                        self.speak(f"{top_label} at {int(dist)} centimeters")
+                        dist_cm = (self.KNOWN_WIDTHS.get(label, 30) * self.FOCAL_LENGTH) / max(width_px, 1)
+                        
+                        if dist_cm < 30.48: # Less than 1 foot
+                            dist_str = f"{int(dist_cm)} centimeters"
+                        else: # More than 1 foot, convert to feet
+                            dist_feet = round(dist_cm / 30.48, 1)
+                            unit = "feet" if dist_feet != 1.0 else "foot"
+                            dist_str = f"{dist_feet} {unit}"
+                            
+                        self.speak(f"{label} at {dist_str}")
+                    
                     self.last_speech_time = now
             else:
-                # Clear overlay if nothing is found
                 Clock.schedule_once(lambda dt: self.overlay.canvas.clear(), 0)
-                def clear_labels(dt):
-                    for l in self.overlay.labels:
-                        self.overlay.remove_widget(l)
-                    self.overlay.labels.clear()
-                Clock.schedule_once(clear_labels, 0)
 
         except Exception as e:
             Logger.error(f"AI_ERROR: {e}")
