@@ -1,188 +1,60 @@
 name: Build APK
 
-
-
 on:
-
   push:
-
     branches: [ main ]
 
-
-
 jobs:
-
   build:
-
     runs-on: ubuntu-22.04
-
     timeout-minutes: 600
-
     steps:
-
-      - uses: actions/checkout@v4
-
-
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Setup Python
-
         uses: actions/setup-python@v5
-
         with:
-
           python-version: '3.11'
 
-
-
       - name: Setup Java
-
         uses: actions/setup-java@v4
-
         with:
-
           distribution: 'temurin'
-
           java-version: '17'
 
-
-
       - name: Cache Buildozer Data
-
         uses: actions/cache@v4
-
         with:
-
           path: .buildozer
-
           key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
-
           restore-keys: |
-
             ${{ runner.os }}-buildozer-
 
-
-
       - name: Install System Dependencies
-
         run: |
-
           sudo apt-get update
-
-          # Force remove conflicting libunwind packages to fix "held broken packages" error
-
           sudo apt-get remove -y libunwind-14-dev libunwind-dev || true
-
           sudo apt-get install -y \
-
-            build-essential \
-
-            libffi-dev \
-
-            libssl-dev \
-
-            libsqlite3-dev \
-
-            zlib1g-dev \
-
-            liblzma-dev \
-
-            libbz2-dev \
-
-            libreadline-dev \
-
-            libncursesw5-dev \
-
-            libgdbm-dev \
-
-            libdb-dev \
-
-            uuid-dev \
-
-            libltdl-dev \
-
-            pkg-config \
-
-            autoconf \
-
-            automake \
-
-            libtool \
-
-            cmake \
-
-            ffmpeg \
-
-            libsdl2-dev \
-
-            libsdl2-image-dev \
-
-            libsdl2-mixer-dev \
-
-            libsdl2-ttf-dev \
-
-            libportmidi-dev \
-
-            libswscale-dev \
-
-            libavformat-dev \
-
-            libavcodec-dev \
-
-            libgstreamer1.0-dev \
-
-            gstreamer1.0-plugins-base \
-
+            build-essential libffi-dev libssl-dev libsqlite3-dev zlib1g-dev \
+            liblzma-dev libbz2-dev libreadline-dev libncursesw5-dev libgdbm-dev \
+            libdb-dev uuid-dev libltdl-dev pkg-config autoconf automake libtool \
+            cmake ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev \
+            libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev \
+            libavcodec-dev libgstreamer1.0-dev gstreamer1.0-plugins-base \
             gstreamer1.0-plugins-good
-
           python -m pip install --upgrade pip
-
           python -m pip install --user --upgrade buildozer "cython<3.0.0" virtualenv wheel
 
-          
-
-      - name: Debug File Path (Check Java Files)
-
-        run: |
-
-          # Ensuring we are looking in the right folder
-
-          ls -R camerax_provider/
-
-
-
       - name: Increase Virtual Memory (Swap)
-
         run: |
-
-          # Turn off swap if it's already active to avoid "Text file busy"
-
           sudo swapoff /swapfile || true
-
-          
-
-          # Create a 4GB swap file
-
           sudo fallocate -l 4G /swapfile
-
           sudo chmod 600 /swapfile
-
           sudo mkswap /swapfile
-
           sudo swapon /swapfile
-
-          
-
-          # Set swappiness and check memory
-
           sudo sysctl vm.swappiness=10
-
           free -h
-
-
-
-          # ... (previous steps: Setup Java, Cache, etc.) ...
-
-
 
       # --- THIS IS THE CRITICAL SECTION I GAVE YOU ---
       - name: Setup Android SDK and Fix Path
@@ -195,39 +67,17 @@ jobs:
           sudo mkdir -p /usr/local/lib/android/sdk/tools/bin
           sudo ln -s /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager /usr/local/lib/android/sdk/tools/bin/sdkmanager
 
-
-
       - name: Build APK
-
         run: |
-
           export PATH=$PATH:~/.local/bin
-
           buildozer -v android debug
-
         env:
-
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-
           ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/25.2.9519653
 
-
-
-      # ... (Upload APK step) ...
-
-          
-
-
-
       - name: Upload APK
-
         if: always()
-
         uses: actions/upload-artifact@v4
-
         with:
-
           name: AI-Vision-Assistant-APK
-
           path: bin/*.apk
-
