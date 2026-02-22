@@ -9,7 +9,8 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 600
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -33,71 +34,36 @@ jobs:
       - name: Install System Dependencies
         run: |
           sudo apt-get update
-          # Force remove conflicting libunwind packages to fix "held broken packages" error
           sudo apt-get remove -y libunwind-14-dev libunwind-dev || true
           sudo apt-get install -y \
-            build-essential \
-            libffi-dev \
-            libssl-dev \
-            libsqlite3-dev \
-            zlib1g-dev \
-            liblzma-dev \
-            libbz2-dev \
-            libreadline-dev \
-            libncursesw5-dev \
-            libgdbm-dev \
-            libdb-dev \
-            uuid-dev \
-            libltdl-dev \
-            pkg-config \
-            autoconf \
-            automake \
-            libtool \
-            cmake \
-            ffmpeg \
-            libsdl2-dev \
-            libsdl2-image-dev \
-            libsdl2-mixer-dev \
-            libsdl2-ttf-dev \
-            libportmidi-dev \
-            libswscale-dev \
-            libavformat-dev \
-            libavcodec-dev \
-            libgstreamer1.0-dev \
-            gstreamer1.0-plugins-base \
+            build-essential libffi-dev libssl-dev libsqlite3-dev zlib1g-dev \
+            liblzma-dev libbz2-dev libreadline-dev libncursesw5-dev libgdbm-dev \
+            libdb-dev uuid-dev libltdl-dev pkg-config autoconf automake libtool \
+            cmake ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev \
+            libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev \
+            libavcodec-dev libgstreamer1.0-dev gstreamer1.0-plugins-base \
             gstreamer1.0-plugins-good
           python -m pip install --upgrade pip
           python -m pip install --user --upgrade buildozer "cython<3.0.0" virtualenv wheel
-          
-      - name: Debug File Path (Check Java Files)
-        run: |
-          # Ensuring we are looking in the right folder
-          ls -R camerax_provider/
 
       - name: Increase Virtual Memory (Swap)
         run: |
-          # Turn off swap if it's already active to avoid "Text file busy"
           sudo swapoff /swapfile || true
-          
-          # Create a 4GB swap file
           sudo fallocate -l 4G /swapfile
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
-          
-          # Set swappiness and check memory
           sudo sysctl vm.swappiness=10
           free -h
 
-          # ... (previous steps: Setup Java, Cache, etc.) ...
-
-      - name: Setup Android SDK API 33
+      # --- THIS IS THE CRITICAL SECTION I GAVE YOU ---
+      - name: Setup Android SDK and Fix Path
         run: |
           # 1. Accept licenses
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
-          # 2. Install required components
+          # 2. Install specific Android 33 components
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-33" "build-tools;33.0.0" "ndk;25.2.9519653"
-          # 3. FIX: Create symlink so Buildozer finds sdkmanager where it expects it
+          # 3. Create the symlink so Buildozer can find sdkmanager
           sudo mkdir -p /usr/local/lib/android/sdk/tools/bin
           sudo ln -s /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager /usr/local/lib/android/sdk/tools/bin/sdkmanager
 
@@ -108,9 +74,6 @@ jobs:
         env:
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
           ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/25.2.9519653
-
-      # ... (Upload APK step) ...
-          
 
       - name: Upload APK
         if: always()
