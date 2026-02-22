@@ -64,10 +64,11 @@ class BBoxOverlay(Widget):
 class VisionApp(App):
     def build(self):
         self.current_mode = 1 
-        self.KNOWN_WIDTHS = {'person': 50, 'chair': 45, 'bottle': 8, 'cell phone': 7, 'cup': 10}
+        # Known widths in cm for distance calculation
+        self.KNOWN_WIDTHS = {'person': 50, 'chair': 45, 'bottle': 8, 'cell phone': 7, 'cup': 10, 'laptop': 35, 'backpack': 30}
         self.FOCAL_LENGTH = 715 
         self.last_speech_time = 0
-        self.SPEECH_COOLDOWN = 5 # Adjusted for longer sentences
+        self.SPEECH_COOLDOWN = 4.5 
         
         self.class_names = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
 
@@ -83,6 +84,7 @@ class VisionApp(App):
 
         self.camera_container = FloatLayout()
         self.preview = Preview(aspect_ratio='16:9')
+        # Analysis properties set here and in connect_camera for reliability
         self.preview.enable_analyze_pixels = True
         self.preview.analyze_pixels_callback = self.analyze_frame
         self.overlay = BBoxOverlay()
@@ -106,7 +108,7 @@ class VisionApp(App):
             try:
                 PythonActivity = autoclass('org.kivy.android.PythonActivity')
                 self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
-                Clock.schedule_once(lambda dt: self.tts.setSpeechRate(0.85) if self.tts else None, 1.5)
+                Clock.schedule_once(lambda dt: self.tts.setSpeechRate(0.8) if self.tts else None, 1.5)
             except Exception as e:
                 Logger.error(f"TTS Error: {e}")
 
@@ -130,7 +132,8 @@ class VisionApp(App):
         if all(grants): self.start_camera()
 
     def start_camera(self):
-        Clock.schedule_once(lambda dt: self.preview.connect_camera(camera_id='back'), 1)
+        # FIX: Passing enable_analyze_pixels directly into connect_camera ensures the loop starts
+        Clock.schedule_once(lambda dt: self.preview.connect_camera(camera_id='back', enable_analyze_pixels=True), 1)
 
     def toggle_mode(self, instance):
         self.current_mode = 2 if self.current_mode == 1 else 1
@@ -165,7 +168,8 @@ class VisionApp(App):
             output = self.interpreter.get_tensor(self.output_details[0]['index'])[0].transpose()
             
             scores = np.max(output[:, 4:], axis=1)
-            mask = scores > 0.40
+            # Lowered threshold for better detection sensitivity
+            mask = scores > 0.35
             
             if np.any(mask):
                 valid_boxes = output[mask]
@@ -184,12 +188,11 @@ class VisionApp(App):
                 now = time.time()
                 if now - self.last_speech_time > self.SPEECH_COOLDOWN:
                     if self.current_mode == 1:
-                        # Logic for Multi-Object and Direction
                         descriptions = []
                         for i in range(len(best_boxes)):
                             label = self.class_names[int(best_classes[i])]
-                            xc = best_boxes[i][0]
-                            # Determine Direction
+                            xc = best_boxes[i][0] # Center X (0 to 640)
+                            # Logic for direction
                             if xc < 213: direction = "on your left"
                             elif xc > 426: direction = "on your right"
                             else: direction = "in front of you"
@@ -198,15 +201,15 @@ class VisionApp(App):
                         full_sentence = "I see a " + ", and a ".join(descriptions)
                         self.speak(full_sentence)
                     else:
-                        # Logic for Mode 2: Single Object + Smart Distance
                         label = self.class_names[int(best_classes[0])]
                         xc, yc, w, h = best_boxes[0][:4]
                         width_px = w * (width / 640)
                         dist_cm = (self.KNOWN_WIDTHS.get(label, 30) * self.FOCAL_LENGTH) / max(width_px, 1)
                         
-                        if dist_cm < 30.48: # Less than 1 foot
+                        # Smart unit selection: cm for < 1 foot, feet for >= 1 foot
+                        if dist_cm < 30.48:
                             dist_str = f"{int(dist_cm)} centimeters"
-                        else: # More than 1 foot, convert to feet
+                        else:
                             dist_feet = round(dist_cm / 30.48, 1)
                             unit = "feet" if dist_feet != 1.0 else "foot"
                             dist_str = f"{dist_feet} {unit}"
@@ -215,7 +218,12 @@ class VisionApp(App):
                     
                     self.last_speech_time = now
             else:
+                # Clear boxes if nothing is detected
                 Clock.schedule_once(lambda dt: self.overlay.canvas.clear(), 0)
+                def clear_labels(dt):
+                    for l in self.overlay.labels: self.overlay.remove_widget(l)
+                    self.overlay.labels.clear()
+                Clock.schedule_once(clear_labels, 0)
 
         except Exception as e:
             Logger.error(f"AI_ERROR: {e}")
