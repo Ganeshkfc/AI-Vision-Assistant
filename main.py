@@ -26,6 +26,7 @@ except ImportError:
         import tensorflow.lite as tflite
     except ImportError:
         tflite = None
+        Logger.error("TFLite module not found!")
 
 class BBoxOverlay(Widget):
     def __init__(self, **kwargs):
@@ -38,203 +39,266 @@ class BBoxOverlay(Widget):
             self.remove_widget(lbl)
         self.labels.clear()
 
-        # Force sizes to floats to avoid list-multiplication errors
-        pw = float(preview_widget.width)
-        ph = float(preview_widget.height)
-        px = float(preview_widget.x)
-        py = float(preview_widget.y)
+        pw, ph = preview_widget.size
+        px, py = preview_widget.pos
 
         with self.canvas:
             for i in range(len(valid_boxes)):
                 box = valid_boxes[i]
                 class_id = int(valid_class_ids[i])
-                label_name = class_names[class_id] if class_id < len(class_names) else "Object"
+                label_name = class_names[class_id]
 
-                # Map 640x640 model coordinates to screen coordinates
-                xc, yc, w, h = float(box[0]), float(box[1]), float(box[2]), float(box[3])
+                # Convert numpy values to standard Python floats to avoid crashes
+                xc, yc, w, h = map(float, box[:4])
+                
                 scale_x = pw / 640.0
                 scale_y = ph / 640.0
                 
                 w_px = w * scale_x
                 h_px = h * scale_y
-                x1_px = px + ((xc - w/2.0) * scale_x)
-                y1_px = py + ph - ((yc + h/2.0) * scale_y) 
+                x1_px = px + ((xc - w/2) * scale_x)
+                y1_px = py + ph - ((yc + h/2) * scale_y) 
 
-                Color(0, 1, 0, 1) # Green boxes
-                Line(rectangle=(float(x1_px), float(y1_px), float(w_px), float(h_px)), width=2)
+                Color(0, 1, 0, 1) 
+                Line(rectangle=(x1_px, y1_px, w_px, h_px), width=2)
 
-                lbl = Label(text=label_name.upper(), pos=(float(x1_px), float(y1_px + h_px)), 
-                            size_hint=(None, None), size=(200, 40), color=(0,1,0,1), bold=True)
+                # Create label with safe float coordinates
+                lbl = Label(text=label_name, pos=(float(x1_px), float(y1_px + h_px)), 
+                            size_hint=(None, None), size=(150, 40), color=(0,1,0,1))
                 self.add_widget(lbl)
                 self.labels.append(lbl)
 
 class VisionApp(App):
     def build(self):
         self.current_mode = 1 
-        self.sensitivity = 0.50 
-        self.KNOWN_WIDTHS = {'person': 45, 'chair': 50, 'bottle': 8, 'cell phone': 7}
-        self.FOCAL_LENGTH = 720 
+        self.KNOWN_WIDTHS = {'person': 50, 'chair': 45, 'bottle': 8, 'cell phone': 7}
+        self.FOCAL_LENGTH = 715 
         self.last_speech_time = 0
-        self.SPEECH_COOLDOWN = 4.0 
+        self.SPEECH_COOLDOWN = 4 
+        self.detection_threshold = 0.35 # Default threshold
+        
         self.class_names = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
 
         self.tts = None
         self.interpreter = None
 
-        main_layout = BoxLayout(orientation='vertical')
+        layout = BoxLayout(orientation='vertical')
         
         self.top_btn = Button(
-            text="AI VISION: STARTING...",
-            background_color=(0.1, 0.4, 0.8, 1), font_size='18sp', size_hint_y=0.15, halign='center'
+            text="TAP HERE TO CHANGE MODE\n(Mode 1: Detection Active)",
+            background_color=(0.1, 0.5, 0.8, 1), font_size='20sp', size_hint_y=0.15, halign='center'
         )
         self.top_btn.bind(on_release=self.toggle_mode)
 
-        self.camera_area = FloatLayout()
+        self.camera_container = FloatLayout()
         self.preview = Preview(aspect_ratio='16:9')
+        self.preview.enable_analyze_pixels = True
+        self.preview.analyze_pixels_callback = self.analyze_frame
+        
         self.overlay = BBoxOverlay()
         
-        slider_layout = BoxLayout(orientation='vertical', size_hint=(0.15, 0.5), pos_hint={'right': 1, 'center_y': 0.5}, padding=5)
-        self.sens_label = Label(text=f"SENS\n{int(self.sensitivity*100)}%", size_hint_y=0.2)
-        self.slider = Slider(min=0.1, max=0.9, value=self.sensitivity, orientation='vertical')
-        self.slider.bind(value=self.on_slider_change)
-        slider_layout.add_widget(self.sens_label)
-        slider_layout.add_widget(self.slider)
+        # Sensitivity Slider on the left side
+        self.slider = Slider(min=0.1, max=0.9, value=self.detection_threshold, orientation='vertical', 
+                             size_hint=(0.1, 0.8), pos_hint={'x': 0.0, 'center_y': 0.5})
+        self.slider.bind(value=self.on_slider_value)
 
-        self.camera_area.add_widget(self.preview)
-        self.camera_area.add_widget(self.overlay)
-        self.camera_area.add_widget(slider_layout)
+        self.camera_container.add_widget(self.preview)
+        self.camera_container.add_widget(self.overlay)
+        self.camera_container.add_widget(self.slider)
 
-        main_layout.add_widget(self.top_btn)
-        main_layout.add_widget(self.camera_area)
-        return main_layout
+        self.bottom_btn = Button(
+            text="TAP HERE TO CLOSE APP",
+            background_color=(0.8, 0.2, 0.2, 1), font_size='20sp', size_hint_y=0.15, halign='center'
+        )
+        self.bottom_btn.bind(on_release=self.check_close_app)
 
-    def on_slider_change(self, instance, value):
-        self.sensitivity = float(value)
-        self.sens_label.text = f"SENS\n{int(value*100)}%"
+        layout.add_widget(self.top_btn)
+        layout.add_widget(self.camera_container)
+        layout.add_widget(self.bottom_btn)
+        return layout
+
+    def on_slider_value(self, instance, value):
+        self.detection_threshold = value
 
     def on_start(self):
         if platform == 'android':
             try:
                 PythonActivity = autoclass('org.kivy.android.PythonActivity')
                 self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
-            except: pass
-        Clock.schedule_once(self.load_model, 1.0)
+                Clock.schedule_once(lambda dt: self.tts.setSpeechRate(0.7) if self.tts else None, 1.5)
+            except Exception as e:
+                Logger.error(f"TTS Initialization Error: {e}")
+
+        Clock.schedule_once(self.load_model, 0.5)
         if platform == 'android':
-            request_permissions([Permission.CAMERA], self.on_permission_result)
+            perms = [Permission.CAMERA, Permission.RECORD_AUDIO]
+            request_permissions(perms, self.on_permission_result)
         else:
             self.start_camera()
 
     def load_model(self, dt):
-        try:
-            cur_dir = os.path.dirname(os.path.abspath(__file__))
-            model_path = os.path.join(cur_dir, "yolov8n_float32.tflite")
-            if os.path.exists(model_path):
+        cur_dir = os.path.dirname(os.path.abspath(__file__))
+        model_path = os.path.join(cur_dir, "yolov8n_float32.tflite")
+        if os.path.exists(model_path) and tflite:
+            try:
                 self.interpreter = tflite.Interpreter(model_path=model_path)
                 self.interpreter.allocate_tensors()
                 self.input_details = self.interpreter.get_input_details()
                 self.output_details = self.interpreter.get_output_details()
-                self.top_btn.text = "MODE 1: MULTI-DETECTION\n(Tap to switch)"
                 Logger.info("MODEL: Loaded Successfully!")
-        except Exception as e:
-            Logger.error(f"MODEL_LOAD_ERROR: {e}")
+            except Exception as e:
+                Logger.error(f"MODEL: Load Error: {e}")
 
     def on_permission_result(self, permissions, grants):
-        if all(grants): self.start_camera()
+        if all(grants):
+            self.start_camera()
 
     def start_camera(self):
-        self.preview.analyze_pixels_callback = self.analyze_frame
-        Clock.schedule_once(lambda dt: self.preview.connect_camera(enable_analyze_pixels=True), 1.0)
+        Clock.schedule_once(self._connect_camera, 1)
+
+    def _connect_camera(self, dt):
+        try:
+            self.preview.connect_camera(camera_id='back', enable_analyze_pixels=True)
+            Clock.schedule_once(lambda x: self.speak("Vision Activated"), 2)
+        except Exception as e:
+            Logger.error(f"CAMERA: Error {e}")
 
     def toggle_mode(self, instance):
         self.current_mode = 2 if self.current_mode == 1 else 1
-        msg = "Distance Mode" if self.current_mode == 2 else "Multi Detection"
-        self.top_btn.text = f"MODE {self.current_mode}: {msg.upper()}\n(Tap to switch)"
+        msg = "Mode 2: Distance" if self.current_mode == 2 else "Mode 1: Detection"
+        self.speak(msg)
+        self.top_btn.text = f"TAP TO CHANGE MODE\n({msg} Active)"
+
+    def check_close_app(self, instance):
+        self.speak("Closing")
+        self.preview.disconnect_camera()
+        Clock.schedule_once(lambda dt: self.stop(), 0.5)
 
     def speak(self, text):
         if self.tts:
-            try: self.tts.speak(text, 0, None)
-            except: pass
+            try:
+                self.tts.speak(text, 0, None)
+            except:
+                pass
 
-    def analyze_frame(self, pixels, width, height, rotation, *args):
-        if not self.interpreter: return
+    def get_distance_cm(self, label, width_px, frame_w):
+        real_w = self.KNOWN_WIDTHS.get(label, 30)
+        return (real_w * self.FOCAL_LENGTH) / max(width_px, 1)
+
+    def analyze_frame(self, pixels, *args):
+        if not self.interpreter:
+            return
+
         try:
-            # Prepare image
-            frame = np.frombuffer(pixels, dtype=np.uint8).reshape((height, width, 4))
-            img = Image.fromarray(frame[:, :, :3]).resize((640, 640))
+            if isinstance(args[0], (list, tuple)):
+                width, height = args[0]
+            else:
+                width = args[0]
+                height = args[1]
+
+            channels = len(pixels) // (width * height)
+            frame = np.frombuffer(pixels, dtype=np.uint8).reshape((height, width, channels))
+            rgb = frame[:, :, :3] 
+            
+            img = Image.fromarray(rgb).resize((640, 640))
             input_data = np.expand_dims(np.array(img), axis=0).astype(np.float32) / 255.0
             
-            # YOLOv8 format check
             if self.input_details[0]['shape'][1] == 3: 
                 input_data = np.transpose(input_data, (0, 3, 1, 2))
                 
             self.interpreter.set_tensor(self.input_details[0]['index'], input_data)
             self.interpreter.invoke()
+            output = self.interpreter.get_tensor(self.output_details[0]['index'])[0]
             
-            # Get raw output and force to float32 NumPy array immediately
-            raw_output = self.interpreter.get_tensor(self.output_details[0]['index'])
-            output = np.asarray(raw_output, dtype=np.float32)[0]
-            
-            # YOLOv8 usually outputs (84, 8400). Transpose to (8400, 84)
-            if output.shape[0] < output.shape[1]:
-                output = output.transpose()
-            
-            # Extract scores and filter by sensitivity
+            output = output.transpose() 
             scores = np.max(output[:, 4:], axis=1)
-            mask = scores > self.sensitivity 
+            
+            # Using the dynamic threshold from the slider
+            mask = scores > self.detection_threshold 
             
             if np.any(mask):
                 valid_boxes = output[mask]
                 valid_scores = scores[mask]
                 valid_class_ids = np.argmax(valid_boxes[:, 4:], axis=1)
                 
-                indices = self.apply_simple_nms(valid_boxes, valid_scores, 0.45)
-                if len(indices) > 0:
-                    final_boxes = valid_boxes[indices]
-                    final_classes = valid_class_ids[indices]
+                sort_idx = np.argsort(valid_scores)[::-1]
+                top_k = min(5, len(sort_idx))
+                best_boxes = valid_boxes[sort_idx][:top_k]
+                best_classes = valid_class_ids[sort_idx][:top_k]
+                
+                if self.current_mode == 2:
+                    # In Mode 2, find the object closest to the center (320, 320)
+                    center_x, center_y = 320.0, 320.0
+                    min_dist_center = float('inf')
+                    best_idx = -1
+                    for i in range(len(best_boxes)):
+                        xc, yc = best_boxes[i][0], best_boxes[i][1]
+                        dist_to_center = ((xc - center_x) ** 2 + (yc - center_y) ** 2) ** 0.5
+                        if dist_to_center < min_dist_center:
+                            min_dist_center = dist_to_center
+                            best_idx = i
+
+                    if best_idx != -1:
+                        best_boxes = np.array([best_boxes[best_idx]])
+                        best_classes = np.array([best_classes[best_idx]])
+
+                # Safely pass captured variables to Clock schedule to avoid late binding issues
+                boxes_to_draw = np.copy(best_boxes)
+                classes_to_draw = np.copy(best_classes)
+                Clock.schedule_once(lambda dt, b=boxes_to_draw, c=classes_to_draw: self.overlay.draw_boxes(b, c, self.class_names, self.preview), 0)
+                
+                now = time.time()
+                if now - self.last_speech_time > self.SPEECH_COOLDOWN:
+                    if self.current_mode == 1:
+                        phrases = []
+                        # Limit spoken objects to 3 so the voice doesn't trail on forever
+                        for i in range(min(3, len(best_boxes))):
+                            box = best_boxes[i]
+                            cls_id = int(best_classes[i])
+                            label = self.class_names[cls_id]
+                            xc = box[0]
+                            
+                            # Determine relative direction
+                            if xc < 640 / 3.0:
+                                direction = "on your left"
+                            elif xc > 2 * 640 / 3.0:
+                                direction = "on your right"
+                            else:
+                                direction = "in front of you"
+                                
+                            phrases.append(f"a {label} {direction}")
+
+                        if phrases:
+                            speech_text = "I see " + " and ".join(phrases)
+                            self.speak(speech_text)
+                            self.last_speech_time = now
                     
-                    Clock.schedule_once(lambda dt: self.overlay.draw_boxes(final_boxes, final_classes, self.class_names, self.preview), 0)
-                    
-                    # Logic for Speech (limited rate)
-                    now = time.time()
-                    if now - self.last_speech_time > self.SPEECH_COOLDOWN:
-                        label = self.class_names[int(final_classes[0])]
-                        self.speak(f"I see a {label}")
+                    elif self.current_mode == 2:
+                        box = best_boxes[0]
+                        top_label = self.class_names[int(best_classes[0])]
+                        xc, yc, w, h = box[:4]
+                        width_px = w * (width / 640.0)
+                        dist_cm = self.get_distance_cm(top_label, width_px, width)
+                        
+                        # Distance translation logic
+                        if dist_cm < 30.48:  # Less than 1 foot
+                            self.speak(f"I see a {top_label} {int(dist_cm)} centimeters in front of you")
+                        else:
+                            dist_ft = dist_cm / 30.48
+                            self.speak(f"I see a {top_label} {int(round(dist_ft))} feet in front of you")
+                            
                         self.last_speech_time = now
             else:
+                # Clear overlay if nothing is found
                 Clock.schedule_once(lambda dt: self.overlay.canvas.clear(), 0)
+                def clear_labels(dt):
+                    for l in self.overlay.labels:
+                        self.overlay.remove_widget(l)
+                    self.overlay.labels.clear()
+                Clock.schedule_once(clear_labels, 0)
 
         except Exception as e:
             Logger.error(f"AI_ERROR: {e}")
-
-    def apply_simple_nms(self, boxes, scores, iou_thresh):
-        if len(boxes) == 0: return []
-        idxs = np.argsort(scores)[::-1]
-        keep = []
-        while len(idxs) > 0:
-            i = idxs[0]
-            keep.append(i)
-            if len(idxs) == 1: break
-            rest = idxs[1:]
-            ious = self.box_iou(boxes[i], boxes[rest])
-            idxs = rest[ious < iou_thresh]
-        return keep
-
-    def box_iou(self, box1, boxes):
-        # Convert all to strictly NumPy float arrays
-        b1 = np.asarray(box1, dtype=np.float32)
-        bs = np.asarray(boxes, dtype=np.float32)
-        if bs.ndim == 1: bs = np.expand_dims(bs, axis=0)
-
-        x1 = np.maximum(b1[0] - b1[2]/2.0, bs[:,0] - bs[:,2]/2.0)
-        y1 = np.maximum(b1[1] - b1[3]/2.0, bs[:,1] - bs[:,3]/2.0)
-        x2 = np.minimum(b1[0] + b1[2]/2.0, bs[:,0] + bs[:,2]/2.0)
-        y2 = np.minimum(b1[1] + b1[3]/2.0, bs[:,1] + bs[:,3]/2.0)
-        
-        inter = np.maximum(0.0, x2 - x1) * np.maximum(0.0, y2 - y1)
-        area1 = b1[2] * b1[3]
-        area2 = bs[:,2] * bs[:,3]
-        union = area1 + area2 - inter
-        return inter / (union + 1e-6)
 
 if __name__ == "__main__":
     VisionApp().run()
