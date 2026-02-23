@@ -48,7 +48,6 @@ class BBoxOverlay(Widget):
                 class_id = int(valid_class_ids[i])
                 label_name = class_names[class_id]
 
-                # Convert numpy values to standard Python floats to avoid crashes
                 xc, yc, w, h = map(float, box[:4])
                 
                 scale_x = pw / 640.0
@@ -62,7 +61,6 @@ class BBoxOverlay(Widget):
                 Color(0, 1, 0, 1) 
                 Line(rectangle=(x1_px, y1_px, w_px, h_px), width=2)
 
-                # Create label with safe float coordinates
                 lbl = Label(text=label_name, pos=(float(x1_px), float(y1_px + h_px)), 
                             size_hint=(None, None), size=(150, 40), color=(0,1,0,1))
                 self.add_widget(lbl)
@@ -71,11 +69,34 @@ class BBoxOverlay(Widget):
 class VisionApp(App):
     def build(self):
         self.current_mode = 1 
-        self.KNOWN_WIDTHS = {'person': 50, 'chair': 45, 'bottle': 8, 'cell phone': 7}
-        self.FOCAL_LENGTH = 715 
+        # Greatly expanded known widths (in cm) for accurate distance
+        self.KNOWN_WIDTHS = {
+            'person': 45, 'chair': 45, 'bottle': 8, 'cell phone': 7,
+            'car': 180, 'bicycle': 60, 'motorcycle': 70, 'airplane': 3000,
+            'bus': 250, 'train': 300, 'truck': 250, 'boat': 200,
+            'traffic light': 25, 'fire hydrant': 20, 'stop sign': 60,
+            'bench': 120, 'bird': 15, 'cat': 25, 'dog': 30, 'horse': 80,
+            'sheep': 60, 'cow': 80, 'elephant': 200, 'bear': 100,
+            'zebra': 120, 'giraffe': 100, 'backpack': 30, 'umbrella': 100,
+            'handbag': 25, 'tie': 10, 'suitcase': 50, 'frisbee': 25,
+            'skis': 10, 'snowboard': 25, 'sports ball': 22, 'kite': 50,
+            'baseball bat': 5, 'baseball glove': 25, 'skateboard': 20,
+            'surfboard': 50, 'tennis racket': 25, 'wine glass': 8,
+            'cup': 8, 'fork': 3, 'knife': 3, 'spoon': 3, 'bowl': 15,
+            'banana': 20, 'apple': 8, 'sandwich': 15, 'orange': 8,
+            'broccoli': 10, 'carrot': 15, 'hot dog': 15, 'pizza': 30,
+            'donut': 10, 'cake': 25, 'couch': 180, 'potted plant': 30,
+            'bed': 150, 'dining table': 120, 'toilet': 40, 'tv': 80,
+            'laptop': 35, 'mouse': 6, 'remote': 5, 'keyboard': 40,
+            'microwave': 50, 'oven': 60, 'toaster': 25, 'sink': 50,
+            'refrigerator': 70, 'book': 15, 'clock': 20, 'vase': 15,
+            'scissors': 10, 'teddy bear': 30, 'hair drier': 15, 'toothbrush': 2
+        }
+        # Calibrated strictly for the AI's 640x640 matrix, ignoring screen size distortions
+        self.FOCAL_LENGTH_640 = 550 
         self.last_speech_time = 0
         self.SPEECH_COOLDOWN = 4 
-        self.detection_threshold = 0.35 # Default threshold
+        self.detection_threshold = 0.35 
         
         self.class_names = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
 
@@ -97,14 +118,18 @@ class VisionApp(App):
         
         self.overlay = BBoxOverlay()
         
-        # Sensitivity Slider on the left side
-        self.slider = Slider(min=0.1, max=0.9, value=self.detection_threshold, orientation='vertical', 
-                             size_hint=(0.1, 0.8), pos_hint={'x': 0.0, 'center_y': 0.5})
+        # UI Container for Slider and Text
+        self.slider_box = BoxLayout(orientation='vertical', size_hint=(0.15, 0.8), pos_hint={'x': 0.0, 'center_y': 0.5})
+        self.slider_label = Label(text=f"{int(self.detection_threshold * 100)}%", size_hint_y=0.1, font_size='18sp', bold=True)
+        self.slider = Slider(min=0.1, max=0.9, value=self.detection_threshold, orientation='vertical', size_hint_y=0.9)
         self.slider.bind(value=self.on_slider_value)
+        
+        self.slider_box.add_widget(self.slider_label)
+        self.slider_box.add_widget(self.slider)
 
         self.camera_container.add_widget(self.preview)
         self.camera_container.add_widget(self.overlay)
-        self.camera_container.add_widget(self.slider)
+        self.camera_container.add_widget(self.slider_box)
 
         self.bottom_btn = Button(
             text="TAP HERE TO CLOSE APP",
@@ -119,6 +144,7 @@ class VisionApp(App):
 
     def on_slider_value(self, instance, value):
         self.detection_threshold = value
+        self.slider_label.text = f"{int(value * 100)}%"
 
     def on_start(self):
         if platform == 'android':
@@ -181,9 +207,44 @@ class VisionApp(App):
             except:
                 pass
 
-    def get_distance_cm(self, label, width_px, frame_w):
-        real_w = self.KNOWN_WIDTHS.get(label, 30)
-        return (real_w * self.FOCAL_LENGTH) / max(width_px, 1)
+    def get_distance_cm(self, label, box_w_640):
+        # Uses the unscaled 640-space width for hyper-accurate distance
+        real_w = self.KNOWN_WIDTHS.get(label, 30) 
+        return (real_w * self.FOCAL_LENGTH_640) / max(box_w_640, 1)
+
+    def non_max_suppression(self, boxes, scores, iou_threshold=0.4):
+        # Cleans up overlapping duplicate bounding boxes mathematically
+        if len(boxes) == 0:
+            return []
+        
+        x1 = boxes[:, 0] - boxes[:, 2] / 2
+        y1 = boxes[:, 1] - boxes[:, 3] / 2
+        x2 = boxes[:, 0] + boxes[:, 2] / 2
+        y2 = boxes[:, 1] + boxes[:, 3] / 2
+        
+        areas = (x2 - x1) * (y2 - y1)
+        order = scores.argsort()[::-1]
+        
+        keep = []
+        while order.size > 0:
+            i = order[0]
+            keep.append(i)
+            
+            xx1 = np.maximum(x1[i], x1[order[1:]])
+            yy1 = np.maximum(y1[i], y1[order[1:]])
+            xx2 = np.minimum(x2[i], x2[order[1:]])
+            yy2 = np.minimum(y2[i], y2[order[1:]])
+            
+            w = np.maximum(0.0, xx2 - xx1)
+            h = np.maximum(0.0, yy2 - yy1)
+            inter = w * h
+            
+            iou = inter / (areas[i] + areas[order[1:]] - inter)
+            
+            inds = np.where(iou <= iou_threshold)[0]
+            order = order[inds + 1]
+            
+        return keep
 
     def analyze_frame(self, pixels, *args):
         if not self.interpreter:
@@ -213,7 +274,6 @@ class VisionApp(App):
             output = output.transpose() 
             scores = np.max(output[:, 4:], axis=1)
             
-            # Using the dynamic threshold from the slider
             mask = scores > self.detection_threshold 
             
             if np.any(mask):
@@ -221,13 +281,18 @@ class VisionApp(App):
                 valid_scores = scores[mask]
                 valid_class_ids = np.argmax(valid_boxes[:, 4:], axis=1)
                 
-                sort_idx = np.argsort(valid_scores)[::-1]
-                top_k = min(5, len(sort_idx))
-                best_boxes = valid_boxes[sort_idx][:top_k]
-                best_classes = valid_class_ids[sort_idx][:top_k]
+                # Apply NMS to remove duplicate overlapping boxes
+                keep_idx = self.non_max_suppression(valid_boxes, valid_scores, iou_threshold=0.4)
+                best_boxes = valid_boxes[keep_idx]
+                best_classes = valid_class_ids[keep_idx]
+                
+                # Limit to Top 5 distinct objects
+                top_k = min(5, len(best_boxes))
+                best_boxes = best_boxes[:top_k]
+                best_classes = best_classes[:top_k]
                 
                 if self.current_mode == 2:
-                    # In Mode 2, find the object closest to the center (320, 320)
+                    # Find strictly the most central object
                     center_x, center_y = 320.0, 320.0
                     min_dist_center = float('inf')
                     best_idx = -1
@@ -242,23 +307,23 @@ class VisionApp(App):
                         best_boxes = np.array([best_boxes[best_idx]])
                         best_classes = np.array([best_classes[best_idx]])
 
-                # Safely pass captured variables to Clock schedule to avoid late binding issues
                 boxes_to_draw = np.copy(best_boxes)
                 classes_to_draw = np.copy(best_classes)
                 Clock.schedule_once(lambda dt, b=boxes_to_draw, c=classes_to_draw: self.overlay.draw_boxes(b, c, self.class_names, self.preview), 0)
                 
                 now = time.time()
                 if now - self.last_speech_time > self.SPEECH_COOLDOWN:
+                    
                     if self.current_mode == 1:
                         phrases = []
-                        # Limit spoken objects to 3 so the voice doesn't trail on forever
+                        seen_objects = set()
+                        
                         for i in range(min(3, len(best_boxes))):
                             box = best_boxes[i]
                             cls_id = int(best_classes[i])
                             label = self.class_names[cls_id]
                             xc = box[0]
                             
-                            # Determine relative direction
                             if xc < 640 / 3.0:
                                 direction = "on your left"
                             elif xc > 2 * 640 / 3.0:
@@ -266,7 +331,12 @@ class VisionApp(App):
                             else:
                                 direction = "in front of you"
                                 
-                            phrases.append(f"a {label} {direction}")
+                            phrase = f"a {label} {direction}"
+                            
+                            # Prevents repeating "chair on your left" multiple times
+                            if phrase not in seen_objects:
+                                phrases.append(phrase)
+                                seen_objects.add(phrase)
 
                         if phrases:
                             speech_text = "I see " + " and ".join(phrases)
@@ -276,20 +346,19 @@ class VisionApp(App):
                     elif self.current_mode == 2:
                         box = best_boxes[0]
                         top_label = self.class_names[int(best_classes[0])]
-                        xc, yc, w, h = box[:4]
-                        width_px = w * (width / 640.0)
-                        dist_cm = self.get_distance_cm(top_label, width_px, width)
+                        w = box[2] # Native 640 space width
                         
-                        # Distance translation logic
-                        if dist_cm < 30.48:  # Less than 1 foot
+                        dist_cm = self.get_distance_cm(top_label, w)
+                        
+                        if dist_cm < 30.48:  
                             self.speak(f"I see a {top_label} {int(dist_cm)} centimeters in front of you")
                         else:
                             dist_ft = dist_cm / 30.48
-                            self.speak(f"I see a {top_label} {int(round(dist_ft))} feet in front of you")
+                            # Uses 1 decimal place (e.g., 2.5 feet) for higher precision
+                            self.speak(f"I see a {top_label} {round(dist_ft, 1)} feet in front of you")
                             
                         self.last_speech_time = now
             else:
-                # Clear overlay if nothing is found
                 Clock.schedule_once(lambda dt: self.overlay.canvas.clear(), 0)
                 def clear_labels(dt):
                     for l in self.overlay.labels:
