@@ -97,7 +97,6 @@ class VisionApp(App):
         return layout
 
     def on_start(self):
-        # Initial model and permission load
         Clock.schedule_once(self.load_model, 0.5)
         if platform == 'android':
             request_permissions([Permission.CAMERA], self.on_permission_result)
@@ -109,18 +108,16 @@ class VisionApp(App):
         try:
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
             self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
-            # Try to set parameters after a delay to ensure initialization
-            Clock.schedule_once(self.verify_tts, 2.5)
+            Clock.schedule_once(self.verify_tts, 3.0) # Increased delay for stability
         except Exception as e:
             Logger.error(f"TTS_INIT_ERROR: {e}")
 
     def verify_tts(self, dt):
         if self.tts:
             try:
-                # 0.4 is very slow. 1.0 is normal.
-                self.tts.setSpeechRate(0.4) 
+                self.tts.setSpeechRate(0.5) 
                 self.speak("System ready.")
-                Logger.info("TTS: Ready and speech rate set to 0.4")
+                Logger.info("TTS: Ready and active.")
             except:
                 pass
 
@@ -141,12 +138,14 @@ class VisionApp(App):
             self.speak("Camera permission required.")
 
     def start_camera(self):
-        Logger.info("CAMERA: Connecting with Analyze Callback...")
-        # CRITICAL FIX: Added analyze_callback=self.analyze_frame
+        Logger.info("CAMERA: Starting camera initialization...")
+        # CRITICAL FIX: Set the callback directly as a property FIRST
+        self.preview.analyze_callback = self.analyze_frame
+        
+        # Then connect WITHOUT passing analyze_callback as a keyword to avoid the TypeError
         Clock.schedule_once(lambda dt: self.preview.connect_camera(
             camera_id='back', 
-            enable_analyze_pixels=True, 
-            analyze_callback=self.analyze_frame
+            enable_analyze_pixels=True
         ), 1.5)
 
     def toggle_mode(self, instance):
@@ -163,7 +162,7 @@ class VisionApp(App):
     def speak(self, text):
         if self.tts:
             try: 
-                self.tts.setSpeechRate(0.4) # Ensure slow speed on every call
+                self.tts.setSpeechRate(0.5)
                 self.tts.speak(text, 0, None)
             except: pass
 
@@ -171,16 +170,15 @@ class VisionApp(App):
         if not self.interpreter: return
         self.frame_count += 1
         
-        # HEARTBEAT: Confirming AI is alive every 100 frames
+        # LOG HEARTBEAT: Watch your logs for this to confirm AI is running!
         if self.frame_count % 100 == 0:
-            Logger.info(f"AI_HEARTBEAT: Camera and AI link is ACTIVE. Frames: {self.frame_count}")
+            Logger.info(f"AI_HEARTBEAT: Frames processed: {self.frame_count}")
 
         try:
             n_pixels = len(pixels)
             channels = n_pixels // (width * height)
             frame = np.frombuffer(pixels, dtype=np.uint8).reshape((height, width, channels))
             
-            # Input resize and normalization
             img = Image.fromarray(frame[:, :, :3]).resize((640, 640))
             
             if self.input_details[0]['dtype'] == np.uint8:
@@ -196,14 +194,13 @@ class VisionApp(App):
             output = self.interpreter.get_tensor(self.output_details[0]['index'])[0].transpose()
             
             scores = np.max(output[:, 4:], axis=1)
-            mask = scores > 0.45 
+            mask = scores > 0.40 # Slightly lower threshold for better detection
             
             if np.any(mask):
                 valid_boxes = output[mask]
                 valid_scores = scores[mask]
                 valid_class_ids = np.argmax(valid_boxes[:, 4:], axis=1)
                 
-                # NMS logic
                 selected = []
                 indices = np.argsort(valid_scores)[::-1]
                 for i in indices:
@@ -224,24 +221,21 @@ class VisionApp(App):
                 
                 now = time.time()
                 if now - self.last_speech_time > self.SPEECH_COOLDOWN:
-                    if self.current_mode == 1:
-                        descriptions = []
-                        for i in range(len(final_boxes)):
-                            label = self.class_names[int(final_classes[i])]
-                            xc = final_boxes[i][0]
-                            if xc < 210: pos = "left"
-                            elif xc > 430: pos = "right"
-                            else: pos = "center"
+                    descriptions = []
+                    for i in range(len(final_boxes)):
+                        label = self.class_names[int(final_classes[i])]
+                        xc = final_boxes[i][0]
+                        pos = "left" if xc < 210 else "right" if xc > 430 else "center"
+                        
+                        if self.current_mode == 1:
                             descriptions.append(f"{label} {pos}")
-                        self.speak("I see: " + ", ".join(descriptions))
-                    else:
-                        label = self.class_names[int(final_classes[0])]
-                        w_px = final_boxes[0][2]
-                        dist_cm = (self.KNOWN_WIDTHS.get(label, 30) * self.FOCAL_LENGTH) / max(w_px, 1)
-                        if dist_cm < 31:
-                            self.speak(f"{label}. {int(dist_cm)} centimeters.")
                         else:
-                            self.speak(f"{label}. {round(dist_cm / 30.48, 1)} feet.")
+                            w_px = final_boxes[i][2]
+                            dist_cm = (self.KNOWN_WIDTHS.get(label, 30) * self.FOCAL_LENGTH) / max(w_px, 1)
+                            dist_str = f"{int(dist_cm)} cm" if dist_cm < 100 else f"{round(dist_cm/30.48, 1)} feet"
+                            descriptions.append(f"{label} at {dist_str}")
+                    
+                    self.speak("I see: " + ", ".join(descriptions))
                     self.last_speech_time = now
             else:
                 Clock.schedule_once(lambda dt: self.overlay.canvas.clear(), 0)
