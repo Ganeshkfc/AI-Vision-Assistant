@@ -171,7 +171,8 @@ class VisionApp(App):
             try: self.tts.speak(text, 0, None)
             except: pass
 
-    def analyze_frame(self, pixels, width, height, rotation):
+    # FIXED: Added *args to catch extra arguments from Camera4Kivy
+    def analyze_frame(self, pixels, width, height, rotation, *args):
         if not self.interpreter: return
         try:
             channels = len(pixels) // (width * height)
