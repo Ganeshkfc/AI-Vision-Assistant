@@ -9,7 +9,7 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.widget import Widget
 from kivy.uix.label import Label
 from kivy.uix.slider import Slider
-from kivy.graphics import Color, Line, Rectangle
+from kivy.graphics import Color, Line
 from kivy.clock import Clock
 from kivy.utils import platform
 from kivy.logger import Logger
@@ -42,7 +42,6 @@ class BBoxOverlay(Widget):
         px, py = preview_widget.pos
 
         with self.canvas:
-            # Draw visual guides for horizontal positioning
             Color(1, 1, 1, 0.2)
             Line(points=[px + pw*0.33, py, px + pw*0.33, py + ph], width=1, dash_length=5)
             Line(points=[px + pw*0.66, py, px + pw*0.66, py + ph], width=1, dash_length=5)
@@ -52,8 +51,8 @@ class BBoxOverlay(Widget):
                 class_id = int(valid_class_ids[i])
                 label_name = class_names[class_id]
 
-                # Ensure coordinates are treated as floats
-                xc, yc, w, h = map(float, box[:4])
+                # Extract as floats to avoid list math errors
+                xc, yc, w, h = float(box[0]), float(box[1]), float(box[2]), float(box[3])
                 scale_x, scale_y = pw / 640.0, ph / 640.0
                 
                 w_px, h_px = w * scale_x, h * scale_y
@@ -168,33 +167,24 @@ class VisionApp(App):
             try: self.tts.speak(text, 0, None)
             except: pass
 
+    # FIX: Added *args to catch extra arguments from camera4kivy
     def analyze_frame(self, pixels, width, height, rotation, *args):
         if not self.interpreter: return
         try:
-            # 1. Image Pre-processing
             channels = len(pixels) // (width * height)
             frame = np.frombuffer(pixels, dtype=np.uint8).reshape((height, width, channels))
             img = Image.fromarray(frame[:, :, :3]).resize((640, 640))
             input_data = np.expand_dims(np.array(img), axis=0).astype(np.float32) / 255.0
             
-            # Check if model expects [batch, channels, height, width]
             if self.input_details[0]['shape'][1] == 3: 
                 input_data = np.transpose(input_data, (0, 3, 1, 2))
                 
-            # 2. Inference
             self.interpreter.set_tensor(self.input_details[0]['index'], input_data)
             self.interpreter.invoke()
             
-            # 3. Post-processing (Fixed to prevent "multiply sequence by non-int")
-            output = np.array(self.interpreter.get_tensor(self.output_details[0]['index']))
-            if len(output.shape) == 3:
-                output = output[0]  # Remove batch dim
+            # FIX: Force to numpy array immediately
+            output = np.array(self.interpreter.get_tensor(self.output_details[0]['index']))[0].transpose()
             
-            # YOLOv8 standard: (Features, Proposals) -> (Proposals, Features)
-            if output.shape[0] < output.shape[1]:
-                output = output.transpose()
-            
-            # Calculate Scores and Mask
             scores = np.max(output[:, 4:], axis=1)
             mask = scores > self.sensitivity 
             
@@ -203,16 +193,12 @@ class VisionApp(App):
                 valid_scores = scores[mask]
                 valid_class_ids = np.argmax(valid_boxes[:, 4:], axis=1)
                 
-                # Apply NMS
                 indices = self.apply_simple_nms(valid_boxes, valid_scores, 0.45)
                 final_boxes = valid_boxes[indices]
                 final_classes = valid_class_ids[indices]
                 
-                # Update UI
-                Clock.schedule_once(lambda dt: self.overlay.draw_boxes(
-                    final_boxes, final_classes, self.class_names, self.preview), 0)
+                Clock.schedule_once(lambda dt: self.overlay.draw_boxes(final_boxes, final_classes, self.class_names, self.preview), 0)
                 
-                # 4. Voice Feedback Logic
                 now = time.time()
                 if now - self.last_speech_time > self.SPEECH_COOLDOWN:
                     descriptions = []
@@ -261,18 +247,16 @@ class VisionApp(App):
         return keep
 
     def box_iou(self, box1, boxes):
-        # Force strict NumPy casting to prevent sequence errors
-        box1 = np.array(box1, dtype=np.float32)
-        boxes = np.array(boxes, dtype=np.float32)
-
-        x1 = np.maximum(box1[0] - box1[2]/2, boxes[:,0] - boxes[:,2]/2)
-        y1 = np.maximum(box1[1] - box1[3]/2, boxes[:,1] - boxes[:,3]/2)
-        x2 = np.minimum(box1[0] + box1[2]/2, boxes[:,0] + boxes[:,2]/2)
-        y2 = np.minimum(box1[1] + box1[3]/2, boxes[:,1] + boxes[:,3]/2)
-        
+        # Ensure NumPy operations
+        b1 = np.array(box1)
+        bs = np.array(boxes)
+        x1 = np.maximum(b1[0] - b1[2]/2, bs[:,0] - bs[:,2]/2)
+        y1 = np.maximum(b1[1] - b1[3]/2, bs[:,1] - bs[:,3]/2)
+        x2 = np.minimum(b1[0] + b1[2]/2, bs[:,0] + bs[:,2]/2)
+        y2 = np.minimum(b1[1] + b1[3]/2, bs[:,1] + bs[:,3]/2)
         inter = np.maximum(0, x2 - x1) * np.maximum(0, y2 - y1)
-        area1 = box1[2] * box1[3]
-        area2 = boxes[:,2] * boxes[:,3]
+        area1 = b1[2] * b1[3]
+        area2 = bs[:,2] * bs[:,3]
         union = area1 + area2 - inter
         return inter / (union + 1e-6)
 
