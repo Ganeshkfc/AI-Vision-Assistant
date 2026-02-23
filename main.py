@@ -8,6 +8,7 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.widget import Widget
 from kivy.uix.label import Label
+from kivy.uix.slider import Slider
 from kivy.graphics import Color, Line
 from kivy.clock import Clock
 from kivy.utils import platform
@@ -64,6 +65,7 @@ class BBoxOverlay(Widget):
 class VisionApp(App):
     def build(self):
         self.current_mode = 1 
+        self.sensitivity = 0.40 # Current Threshold
         self.KNOWN_WIDTHS = {'person': 45, 'chair': 50, 'bottle': 7, 'cell phone': 7, 'cup': 9, 'laptop': 32, 'tv': 80}
         self.FOCAL_LENGTH = 720 
         self.last_speech_time = 0
@@ -74,27 +76,44 @@ class VisionApp(App):
         self.tts = None
         self.interpreter = None
 
-        layout = BoxLayout(orientation='vertical')
+        main_layout = BoxLayout(orientation='vertical')
+
+        # --- TOP BUTTON ---
         self.top_btn = Button(
-            text="MODE 1: MULTI-OBJECT\n(Tap to switch)",
-            background_color=(0.1, 0.4, 0.8, 1), font_size='20sp', size_hint_y=0.15, halign='center'
+            text="AI VISION: STARTING...",
+            background_color=(0.1, 0.4, 0.8, 1), font_size='18sp', size_hint_y=0.12, halign='center'
         )
         self.top_btn.bind(on_release=self.toggle_mode)
+        main_layout.add_widget(self.top_btn)
 
-        self.camera_container = FloatLayout()
-        self.preview = Preview(aspect_ratio='16:9')
-        self.overlay = BBoxOverlay()
+        # --- SENSITIVITY SLIDER ---
+        slider_layout = BoxLayout(orientation='vertical', size_hint_y=0.12, padding=[15, 5])
+        self.slider_label = Label(text=f"Detection Sensitivity: {int(self.sensitivity * 100)}%", font_size='14sp')
+        self.sens_slider = Slider(min=0.05, max=0.95, value=0.40, step=0.05)
+        self.sens_slider.bind(value=self.on_slider_change)
         
+        slider_layout.add_widget(self.slider_label)
+        slider_layout.add_widget(self.sens_slider)
+        main_layout.add_widget(slider_layout)
+
+        # --- CAMERA AREA ---
+        self.camera_container = FloatLayout(size_hint_y=0.66)
+        self.preview = Preview() 
+        self.overlay = BBoxOverlay()
         self.camera_container.add_widget(self.preview)
         self.camera_container.add_widget(self.overlay)
+        main_layout.add_widget(self.camera_container)
 
+        # --- EXIT BUTTON ---
         self.bottom_btn = Button(text="EXIT APP", background_color=(0.8, 0.1, 0.1, 1), size_hint_y=0.10)
         self.bottom_btn.bind(on_release=self.check_close_app)
+        main_layout.add_widget(self.bottom_btn)
 
-        layout.add_widget(self.top_btn)
-        layout.add_widget(self.camera_container)
-        layout.add_widget(self.bottom_btn)
-        return layout
+        return main_layout
+
+    def on_slider_change(self, instance, value):
+        self.sensitivity = value
+        self.slider_label.text = f"Detection Sensitivity: {int(value * 100)}%"
 
     def on_start(self):
         Clock.schedule_once(self.load_model, 0.5)
@@ -108,18 +127,9 @@ class VisionApp(App):
         try:
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
             self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
-            Clock.schedule_once(self.verify_tts, 3.0) # Increased delay for stability
+            Clock.schedule_once(lambda dt: self.speak("System ready."), 3.0)
         except Exception as e:
             Logger.error(f"TTS_INIT_ERROR: {e}")
-
-    def verify_tts(self, dt):
-        if self.tts:
-            try:
-                self.tts.setSpeechRate(0.5) 
-                self.speak("System ready.")
-                Logger.info("TTS: Ready and active.")
-            except:
-                pass
 
     def load_model(self, dt):
         cur_dir = os.path.dirname(os.path.abspath(__file__))
@@ -138,15 +148,11 @@ class VisionApp(App):
             self.speak("Camera permission required.")
 
     def start_camera(self):
-        Logger.info("CAMERA: Starting camera initialization...")
-        # CRITICAL FIX: Set the callback directly as a property FIRST
+        Logger.info("CAMERA: Attempting connection...")
         self.preview.analyze_callback = self.analyze_frame
-        
-        # Then connect WITHOUT passing analyze_callback as a keyword to avoid the TypeError
-        Clock.schedule_once(lambda dt: self.preview.connect_camera(
-            camera_id='back', 
-            enable_analyze_pixels=True
-        ), 1.5)
+        # Using late connection for stability
+        Clock.schedule_once(lambda dt: self.preview.connect_camera(enable_analyze_pixels=True), 1.5)
+        self.top_btn.text = "MODE 1: MULTI-OBJECT\n(Tap to switch)"
 
     def toggle_mode(self, instance):
         self.current_mode = 2 if self.current_mode == 1 else 1
@@ -157,7 +163,7 @@ class VisionApp(App):
     def check_close_app(self, instance):
         self.speak("Exiting.")
         self.preview.disconnect_camera()
-        Clock.schedule_once(lambda dt: self.stop(), 1.0)
+        Clock.schedule_once(lambda dt: self.stop(), 0.5)
 
     def speak(self, text):
         if self.tts:
@@ -167,19 +173,22 @@ class VisionApp(App):
             except: pass
 
     def analyze_frame(self, pixels, width, height, rotation):
-        if not self.interpreter: return
-        self.frame_count += 1
+        if self.frame_count == 0:
+            Logger.info(f"AI_FIRST_FRAME: Received {width}x{height}")
         
-        # LOG HEARTBEAT: Watch your logs for this to confirm AI is running!
+        self.frame_count += 1
         if self.frame_count % 100 == 0:
-            Logger.info(f"AI_HEARTBEAT: Frames processed: {self.frame_count}")
+            Logger.info(f"AI_HEARTBEAT: {self.frame_count} frames")
+
+        if not self.interpreter: return
 
         try:
             n_pixels = len(pixels)
-            channels = n_pixels // (width * height)
+            channels = 4 if n_pixels == (width * height * 4) else 3
             frame = np.frombuffer(pixels, dtype=np.uint8).reshape((height, width, channels))
             
-            img = Image.fromarray(frame[:, :, :3]).resize((640, 640))
+            img_np = frame[:, :, :3]
+            img = Image.fromarray(img_np).resize((640, 640))
             
             if self.input_details[0]['dtype'] == np.uint8:
                 input_data = np.expand_dims(np.array(img), axis=0).astype(np.uint8)
@@ -194,7 +203,9 @@ class VisionApp(App):
             output = self.interpreter.get_tensor(self.output_details[0]['index'])[0].transpose()
             
             scores = np.max(output[:, 4:], axis=1)
-            mask = scores > 0.40 # Slightly lower threshold for better detection
+            
+            # --- USING REAL-TIME SLIDER VALUE HERE ---
+            mask = scores > self.sensitivity 
             
             if np.any(mask):
                 valid_boxes = output[mask]
@@ -207,7 +218,7 @@ class VisionApp(App):
                     box_i = valid_boxes[i]
                     is_duplicate = False
                     for j in selected:
-                        if np.linalg.norm(box_i[:2] - valid_boxes[j][:2]) < 70: 
+                        if np.linalg.norm(box_i[:2] - valid_boxes[j][:2]) < 60: 
                             is_duplicate = True
                             break
                     if not is_duplicate:
@@ -235,8 +246,9 @@ class VisionApp(App):
                             dist_str = f"{int(dist_cm)} cm" if dist_cm < 100 else f"{round(dist_cm/30.48, 1)} feet"
                             descriptions.append(f"{label} at {dist_str}")
                     
-                    self.speak("I see: " + ", ".join(descriptions))
-                    self.last_speech_time = now
+                    if descriptions:
+                        self.speak("I see: " + ", ".join(descriptions))
+                        self.last_speech_time = now
             else:
                 Clock.schedule_once(lambda dt: self.overlay.canvas.clear(), 0)
 
