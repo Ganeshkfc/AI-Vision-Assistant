@@ -53,11 +53,11 @@ class BBoxOverlay(Widget):
                 x1_px = px + ((xc - w/2) * scale_x)
                 y1_px = py + ph - ((yc + h/2) * scale_y) 
 
-                Color(0, 1, 0, 1) # Bright green
-                Line(rectangle=(x1_px, y1_px, w_px, h_px), width=4)
+                Color(0, 1, 0, 1) 
+                Line(rectangle=(x1_px, y1_px, w_px, h_px), width=5)
 
                 lbl = Label(text=label_name.upper(), pos=(float(x1_px), float(y1_px + h_px)), 
-                            size_hint=(None, None), size=(200, 50), color=(0,1,0,1), bold=True)
+                            size_hint=(None, None), size=(200, 50), color=(0,1,0,1), bold=True, font_size='18sp')
                 self.add_widget(lbl)
                 self.labels.append(lbl)
 
@@ -68,8 +68,7 @@ class VisionApp(App):
         self.FOCAL_LENGTH = 720 
         self.last_speech_time = 0
         self.SPEECH_COOLDOWN = 5.0 
-        self.frame_count = 0 # To track if the camera is working
-        
+        self.frame_count = 0
         self.class_names = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
 
         self.tts = None
@@ -98,29 +97,30 @@ class VisionApp(App):
         return layout
 
     def on_start(self):
-        if platform == 'android':
-            try:
-                PythonActivity = autoclass('org.kivy.android.PythonActivity')
-                Locale = autoclass('java.util.Locale')
-                self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
-                # Slow down the rate to 0.5 (half speed)
-                Clock.schedule_once(self.setup_tts, 2.0)
-            except Exception as e:
-                Logger.error(f"TTS_INIT_ERROR: {e}")
-
+        # Initial model and permission load
         Clock.schedule_once(self.load_model, 0.5)
         if platform == 'android':
             request_permissions([Permission.CAMERA], self.on_permission_result)
+            self.init_tts()
         else:
             self.start_camera()
 
-    def setup_tts(self, dt):
+    def init_tts(self):
+        try:
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
+            # Try to set parameters after a delay to ensure initialization
+            Clock.schedule_once(self.verify_tts, 2.5)
+        except Exception as e:
+            Logger.error(f"TTS_INIT_ERROR: {e}")
+
+    def verify_tts(self, dt):
         if self.tts:
             try:
-                self.tts.setLanguage(autoclass('java.util.Locale').US)
-                self.tts.setSpeechRate(0.5) # Very slow and clear
+                # 0.4 is very slow. 1.0 is normal.
+                self.tts.setSpeechRate(0.4) 
                 self.speak("System ready.")
-                Logger.info("TTS: Slow rate configured successfully.")
+                Logger.info("TTS: Ready and speech rate set to 0.4")
             except:
                 pass
 
@@ -136,51 +136,53 @@ class VisionApp(App):
 
     def on_permission_result(self, permissions, grants):
         if all(grants): 
-            Logger.info("PERMISSIONS: Camera granted.")
             self.start_camera()
         else:
-            Logger.error("PERMISSIONS: Camera denied!")
+            self.speak("Camera permission required.")
 
     def start_camera(self):
-        Logger.info("CAMERA: Starting back camera...")
-        Clock.schedule_once(lambda dt: self.preview.connect_camera(camera_id='back', enable_analyze_pixels=True), 1)
+        Logger.info("CAMERA: Connecting with Analyze Callback...")
+        # CRITICAL FIX: Added analyze_callback=self.analyze_frame
+        Clock.schedule_once(lambda dt: self.preview.connect_camera(
+            camera_id='back', 
+            enable_analyze_pixels=True, 
+            analyze_callback=self.analyze_frame
+        ), 1.5)
 
     def toggle_mode(self, instance):
         self.current_mode = 2 if self.current_mode == 1 else 1
-        msg = "Mode 2. Distance Focus." if self.current_mode == 2 else "Mode 1. Multi Object."
+        msg = "Distance Mode." if self.current_mode == 2 else "Object Mode."
         self.speak(msg)
         self.top_btn.text = f"{msg.upper()}\n(Tap to switch)"
 
     def check_close_app(self, instance):
-        self.speak("Goodbye.")
+        self.speak("Exiting.")
         self.preview.disconnect_camera()
-        Clock.schedule_once(lambda dt: self.stop(), 0.5)
+        Clock.schedule_once(lambda dt: self.stop(), 1.0)
 
     def speak(self, text):
         if self.tts:
             try: 
-                self.tts.setSpeechRate(0.5) # Force slow speed
+                self.tts.setSpeechRate(0.4) # Ensure slow speed on every call
                 self.tts.speak(text, 0, None)
             except: pass
 
-    def analyze_frame(self, pixels, *args):
+    def analyze_frame(self, pixels, width, height, rotation):
         if not self.interpreter: return
         self.frame_count += 1
         
-        # HEARTBEAT: Log every 60 frames (~2 seconds) to confirm the camera is alive
-        if self.frame_count % 60 == 0:
-            Logger.info(f"AI_HEARTBEAT: Camera is active. Analyzed {self.frame_count} frames so far.")
+        # HEARTBEAT: Confirming AI is alive every 100 frames
+        if self.frame_count % 100 == 0:
+            Logger.info(f"AI_HEARTBEAT: Camera and AI link is ACTIVE. Frames: {self.frame_count}")
 
         try:
-            width, height = args[0] if isinstance(args[0], (list, tuple)) else (args[0], args[1])
             n_pixels = len(pixels)
             channels = n_pixels // (width * height)
             frame = np.frombuffer(pixels, dtype=np.uint8).reshape((height, width, channels))
             
-            # Input Prep
+            # Input resize and normalization
             img = Image.fromarray(frame[:, :, :3]).resize((640, 640))
             
-            # Auto-handle Float vs Uint8 models
             if self.input_details[0]['dtype'] == np.uint8:
                 input_data = np.expand_dims(np.array(img), axis=0).astype(np.uint8)
             else:
@@ -201,15 +203,14 @@ class VisionApp(App):
                 valid_scores = scores[mask]
                 valid_class_ids = np.argmax(valid_boxes[:, 4:], axis=1)
                 
-                # Filter duplicates (NMS)
+                # NMS logic
                 selected = []
                 indices = np.argsort(valid_scores)[::-1]
                 for i in indices:
                     box_i = valid_boxes[i]
                     is_duplicate = False
                     for j in selected:
-                        box_j = valid_boxes[j]
-                        if np.linalg.norm(box_i[:2] - box_j[:2]) < 65: 
+                        if np.linalg.norm(box_i[:2] - valid_boxes[j][:2]) < 70: 
                             is_duplicate = True
                             break
                     if not is_duplicate:
@@ -228,11 +229,11 @@ class VisionApp(App):
                         for i in range(len(final_boxes)):
                             label = self.class_names[int(final_classes[i])]
                             xc = final_boxes[i][0]
-                            if xc < 210: pos = "to your left"
-                            elif xc > 430: pos = "to your right"
-                            else: pos = "straight ahead"
+                            if xc < 210: pos = "left"
+                            elif xc > 430: pos = "right"
+                            else: pos = "center"
                             descriptions.append(f"{label} {pos}")
-                        self.speak("Detected: " + ". And ".join(descriptions))
+                        self.speak("I see: " + ", ".join(descriptions))
                     else:
                         label = self.class_names[int(final_classes[0])]
                         w_px = final_boxes[0][2]
@@ -240,15 +241,13 @@ class VisionApp(App):
                         if dist_cm < 31:
                             self.speak(f"{label}. {int(dist_cm)} centimeters.")
                         else:
-                            feet = round(dist_cm / 30.48, 1)
-                            self.speak(f"{label}. {feet} feet.")
+                            self.speak(f"{label}. {round(dist_cm / 30.48, 1)} feet.")
                     self.last_speech_time = now
             else:
-                # If nothing is detected, clear the boxes
                 Clock.schedule_once(lambda dt: self.overlay.canvas.clear(), 0)
 
         except Exception as e:
-            Logger.error(f"AI_ANALYSIS_ERROR: {e}")
+            Logger.error(f"AI_FRAME_ERROR: {e}")
 
 if __name__ == "__main__":
     VisionApp().run()
