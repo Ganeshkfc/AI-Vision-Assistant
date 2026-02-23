@@ -46,7 +46,6 @@ class BBoxOverlay(Widget):
                 class_id = int(valid_class_ids[i])
                 label_name = class_names[class_id]
 
-                # YOLOv8 format: xc, yc, w, h in 0-640 range
                 xc, yc, w, h = map(float, box[:4])
                 scale_x, scale_y = pw / 640.0, ph / 640.0
                 
@@ -54,22 +53,21 @@ class BBoxOverlay(Widget):
                 x1_px = px + ((xc - w/2) * scale_x)
                 y1_px = py + ph - ((yc + h/2) * scale_y) 
 
-                Color(1, 0, 0, 1) # Red boxes for higher visibility
-                Line(rectangle=(x1_px, y1_px, w_px, h_px), width=3)
+                Color(0, 1, 0, 1) 
+                Line(rectangle=(x1_px, y1_px, w_px, h_px), width=4)
 
-                lbl = Label(text=label_name, pos=(float(x1_px), float(y1_px + h_px)), 
-                            size_hint=(None, None), size=(150, 40), color=(1,1,1,1), bold=True)
+                lbl = Label(text=label_name.upper(), pos=(float(x1_px), float(y1_px + h_px)), 
+                            size_hint=(None, None), size=(200, 50), color=(0,1,0,1), bold=True)
                 self.add_widget(lbl)
                 self.labels.append(lbl)
 
 class VisionApp(App):
     def build(self):
         self.current_mode = 1 
-        # Refined widths in cm for better accuracy
-        self.KNOWN_WIDTHS = {'person': 45, 'chair': 50, 'bottle': 7, 'cell phone': 7, 'cup': 9, 'laptop': 32, 'remote': 5}
-        self.FOCAL_LENGTH = 750 # Calibrated for standard Android wide-angle
+        self.KNOWN_WIDTHS = {'person': 45, 'chair': 50, 'bottle': 7, 'cell phone': 7, 'cup': 9, 'laptop': 32, 'tv': 80}
+        self.FOCAL_LENGTH = 720 
         self.last_speech_time = 0
-        self.SPEECH_COOLDOWN = 4.0 
+        self.SPEECH_COOLDOWN = 5.0 # Increased cooldown for clearer listening
         
         self.class_names = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
 
@@ -78,8 +76,8 @@ class VisionApp(App):
 
         layout = BoxLayout(orientation='vertical')
         self.top_btn = Button(
-            text="MODE 1: MULTI-OBJECT\n(Direction Enabled)",
-            background_color=(0.1, 0.4, 0.9, 1), font_size='20sp', size_hint_y=0.15, halign='center'
+            text="MODE 1: MULTI-OBJECT\n(Tap to switch)",
+            background_color=(0.1, 0.4, 0.8, 1), font_size='20sp', size_hint_y=0.15, halign='center'
         )
         self.top_btn.bind(on_release=self.toggle_mode)
 
@@ -91,8 +89,8 @@ class VisionApp(App):
         self.camera_container.add_widget(self.overlay)
 
         self.bottom_btn = Button(
-            text="CLOSE APP",
-            background_color=(0.7, 0, 0, 1), font_size='18sp', size_hint_y=0.10
+            text="EXIT",
+            background_color=(0.8, 0.1, 0.1, 1), font_size='18sp', size_hint_y=0.12
         )
         self.bottom_btn.bind(on_release=self.check_close_app)
 
@@ -106,6 +104,8 @@ class VisionApp(App):
             try:
                 PythonActivity = autoclass('org.kivy.android.PythonActivity')
                 self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
+                # Setting speed to 0.6 for much slower speech
+                Clock.schedule_once(lambda dt: self.tts.setSpeechRate(0.6) if self.tts else None, 2.0)
             except Exception as e:
                 Logger.error(f"TTS Error: {e}")
 
@@ -138,20 +138,26 @@ class VisionApp(App):
         self.top_btn.text = f"{msg.upper()}\n(Tap to switch)"
 
     def check_close_app(self, instance):
-        self.speak("Goodbye")
+        self.speak("Closing app")
         self.preview.disconnect_camera()
         Clock.schedule_once(lambda dt: self.stop(), 0.5)
 
     def speak(self, text):
         if self.tts:
-            try: self.tts.speak(text, 0, None)
+            try: 
+                self.tts.setSpeechRate(0.6) # Force slow speed every time
+                self.tts.speak(text, 0, None)
             except: pass
 
     def analyze_frame(self, pixels, *args):
         if not self.interpreter: return
         try:
             width, height = args[0] if isinstance(args[0], (list, tuple)) else (args[0], args[1])
-            frame = np.frombuffer(pixels, dtype=np.uint8).reshape((height, width, 4))
+            # Robust frame handling
+            n_pixels = len(pixels)
+            channels = n_pixels // (width * height)
+            frame = np.frombuffer(pixels, dtype=np.uint8).reshape((height, width, channels))
+            
             img = Image.fromarray(frame[:, :, :3]).resize((640, 640))
             input_data = np.expand_dims(np.array(img), axis=0).astype(np.float32) / 255.0
             
@@ -163,33 +169,32 @@ class VisionApp(App):
             output = self.interpreter.get_tensor(self.output_details[0]['index'])[0].transpose()
             
             scores = np.max(output[:, 4:], axis=1)
-            # Threshold set to 0.45 as requested
-            mask = scores > 0.45
+            mask = scores > 0.45 # Keep requested 0.45 threshold
             
             if np.any(mask):
                 valid_boxes = output[mask]
                 valid_scores = scores[mask]
                 valid_class_ids = np.argmax(valid_boxes[:, 4:], axis=1)
                 
-                # Simple Non-Maximum Suppression to ensure distinct objects
-                selected_indices = []
-                sorted_indices = np.argsort(valid_scores)[::-1]
-                for i in sorted_indices:
+                # Better NMS: filter out duplicate boxes for the same object
+                selected = []
+                indices = np.argsort(valid_scores)[::-1]
+                for i in indices:
                     box_i = valid_boxes[i]
-                    overlap = False
-                    for j in selected_indices:
+                    is_duplicate = False
+                    for j in selected:
                         box_j = valid_boxes[j]
-                        # Intersection over Union (IoU) simplified
-                        dist = np.sqrt((box_i[0]-box_j[0])**2 + (box_i[1]-box_j[1])**2)
-                        if dist < 100: # Threshold for overlapping boxes
-                            overlap = True
+                        # If centers are very close, it's the same object
+                        dist = np.linalg.norm(box_i[:2] - box_j[:2])
+                        if dist < 60: 
+                            is_duplicate = True
                             break
-                    if not overlap:
-                        selected_indices.append(i)
-                        if len(selected_indices) >= 3: break
+                    if not is_duplicate:
+                        selected.append(i)
+                        if len(selected) >= 3: break
                 
-                final_boxes = valid_boxes[selected_indices]
-                final_classes = valid_class_ids[selected_indices]
+                final_boxes = valid_boxes[selected]
+                final_classes = valid_class_ids[selected]
                 
                 Clock.schedule_once(lambda dt: self.overlay.draw_boxes(final_boxes, final_classes, self.class_names, self.preview), 0)
                 
@@ -199,33 +204,31 @@ class VisionApp(App):
                         descriptions = []
                         for i in range(len(final_boxes)):
                             label = self.class_names[int(final_classes[i])]
-                            # Improved direction logic using normalized 0-640 range
                             xc = final_boxes[i][0]
-                            if xc < 200: pos = "on your left"
-                            elif xc > 440: pos = "on your right"
-                            else: pos = "in front of you"
+                            if xc < 213: pos = "on your left"
+                            elif xc > 427: pos = "on your right"
+                            else: pos = "straight ahead"
                             descriptions.append(f"{label} {pos}")
                         
-                        self.speak("I see a " + ", and a ".join(descriptions))
+                        self.speak("I see: " + ". And ".join(descriptions))
                     else:
                         label = self.class_names[int(final_classes[0])]
-                        # Distance logic: Known Width / Pixel Width
                         w_px = final_boxes[0][2]
                         dist_cm = (self.KNOWN_WIDTHS.get(label, 30) * self.FOCAL_LENGTH) / max(w_px, 1)
                         
                         if dist_cm < 30.5:
-                            self.speak(f"{label}, {int(dist_cm)} centimeters away")
+                            self.speak(f"{label}, {int(dist_cm)} centimeters")
                         else:
                             feet = round(dist_cm / 30.48, 1)
                             unit = "feet" if feet != 1.0 else "foot"
-                            self.speak(f"{label}, {feet} {unit} away")
+                            self.speak(f"{label}, {feet} {unit}")
                     
                     self.last_speech_time = now
             else:
                 Clock.schedule_once(lambda dt: self.overlay.canvas.clear(), 0)
 
         except Exception as e:
-            Logger.error(f"AI_ERROR: {e}")
+            pass # Suppress logging to keep performance high
 
 if __name__ == "__main__":
     VisionApp().run()
