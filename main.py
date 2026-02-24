@@ -5,6 +5,10 @@ from PIL import Image
 from kivy.app import App
 from kivy.uix.button import Button
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.floatlayout import FloatLayout
+from kivy.uix.widget import Widget
+from kivy.uix.label import Label
+from kivy.graphics import Color, Line
 from kivy.clock import Clock
 from kivy.utils import platform
 from kivy.logger import Logger
@@ -23,13 +27,53 @@ except ImportError:
         tflite = None
         Logger.error("TFLite module not found!")
 
+class BBoxOverlay(Widget):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.labels = []
+
+    def draw_boxes(self, valid_boxes, valid_class_ids, class_names, preview_widget):
+        self.canvas.clear()
+        for lbl in self.labels:
+            self.remove_widget(lbl)
+        self.labels.clear()
+
+        pw, ph = preview_widget.size
+        px, py = preview_widget.pos
+
+        with self.canvas:
+            for i in range(len(valid_boxes)):
+                box = valid_boxes[i]
+                class_id = int(valid_class_ids[i])
+                label_name = class_names[class_id]
+
+                # FIX: Convert numpy values to standard Python floats to avoid the crash
+                xc, yc, w, h = map(float, box[:4])
+                
+                scale_x = pw / 640.0
+                scale_y = ph / 640.0
+                
+                w_px = w * scale_x
+                h_px = h * scale_y
+                x1_px = px + ((xc - w/2) * scale_x)
+                y1_px = py + ph - ((yc + h/2) * scale_y) 
+
+                Color(0, 1, 0, 1) 
+                Line(rectangle=(x1_px, y1_px, w_px, h_px), width=2)
+
+                # Create label with safe float coordinates
+                lbl = Label(text=label_name, pos=(float(x1_px), float(y1_px + h_px)), 
+                            size_hint=(None, None), size=(150, 40), color=(0,1,0,1))
+                self.add_widget(lbl)
+                self.labels.append(lbl)
+
 class VisionApp(App):
     def build(self):
         self.current_mode = 1 
         self.KNOWN_WIDTHS = {'person': 50, 'chair': 45, 'bottle': 8, 'cell phone': 7}
         self.FOCAL_LENGTH = 715 
         self.last_speech_time = 0
-        self.SPEECH_COOLDOWN = 5 # Reduced slightly
+        self.SPEECH_COOLDOWN = 4 
         
         self.class_names = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
 
@@ -37,26 +81,29 @@ class VisionApp(App):
         self.interpreter = None
 
         layout = BoxLayout(orientation='vertical')
-        
-        self.preview = Preview(aspect_ratio='16:9')
-        # CRITICAL: enable pixel analysis
-        self.preview.enable_analyze_pixels = True
-        self.preview.analyze_pixels_callback = self.analyze_frame
-
         self.top_btn = Button(
-            text="TAP HERE TO CHANGE MODE\n(Mode 1 Active: Multi-Object Detection)",
-            background_color=(0.1, 0.5, 0.8, 1), font_size='20sp', size_hint_y=0.2, halign='center'
+            text="TAP HERE TO CHANGE MODE\n(Mode 1: Detection Active)",
+            background_color=(0.1, 0.5, 0.8, 1), font_size='20sp', size_hint_y=0.15, halign='center'
         )
         self.top_btn.bind(on_release=self.toggle_mode)
 
+        self.camera_container = FloatLayout()
+        self.preview = Preview(aspect_ratio='16:9')
+        self.preview.enable_analyze_pixels = True
+        self.preview.analyze_pixels_callback = self.analyze_frame
+        
+        self.overlay = BBoxOverlay()
+        self.camera_container.add_widget(self.preview)
+        self.camera_container.add_widget(self.overlay)
+
         self.bottom_btn = Button(
             text="TAP HERE TO CLOSE APP",
-            background_color=(0.8, 0.2, 0.2, 1), font_size='20sp', size_hint_y=0.2, halign='center'
+            background_color=(0.8, 0.2, 0.2, 1), font_size='20sp', size_hint_y=0.15, halign='center'
         )
         self.bottom_btn.bind(on_release=self.check_close_app)
 
         layout.add_widget(self.top_btn)
-        layout.add_widget(self.preview)
+        layout.add_widget(self.camera_container)
         layout.add_widget(self.bottom_btn)
         return layout
 
@@ -65,13 +112,13 @@ class VisionApp(App):
             try:
                 PythonActivity = autoclass('org.kivy.android.PythonActivity')
                 self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
+                Clock.schedule_once(lambda dt: self.tts.setSpeechRate(0.7) if self.tts else None, 1.5)
             except Exception as e:
                 Logger.error(f"TTS Initialization Error: {e}")
 
         Clock.schedule_once(self.load_model, 0.5)
-
         if platform == 'android':
-            perms = [Permission.CAMERA, Permission.RECORD_AUDIO] # Added Record Audio just in case
+            perms = [Permission.CAMERA, Permission.RECORD_AUDIO]
             request_permissions(perms, self.on_permission_result)
         else:
             self.start_camera()
@@ -79,7 +126,6 @@ class VisionApp(App):
     def load_model(self, dt):
         cur_dir = os.path.dirname(os.path.abspath(__file__))
         model_path = os.path.join(cur_dir, "yolov8n_float32.tflite")
-        
         if os.path.exists(model_path) and tflite:
             try:
                 self.interpreter = tflite.Interpreter(model_path=model_path)
@@ -89,23 +135,17 @@ class VisionApp(App):
                 Logger.info("MODEL: Loaded Successfully!")
             except Exception as e:
                 Logger.error(f"MODEL: Load Error: {e}")
-        else:
-            Logger.error(f"MODEL: File not found at {model_path}")
 
     def on_permission_result(self, permissions, grants):
         if all(grants):
-            Logger.info("PERMS: All granted.")
             self.start_camera()
-        else:
-            Logger.error("PERMS: Denied.")
 
     def start_camera(self):
         Clock.schedule_once(self._connect_camera, 1)
 
     def _connect_camera(self, dt):
         try:
-            self.preview.connect_camera(camera_id='back', enable_analyze_pixels = True)
-            Logger.info("CAMERA: Connected")
+            self.preview.connect_camera(camera_id='back', enable_analyze_pixels=True)
             Clock.schedule_once(lambda x: self.speak("Vision Activated"), 2)
         except Exception as e:
             Logger.error(f"CAMERA: Error {e}")
@@ -114,7 +154,7 @@ class VisionApp(App):
         self.current_mode = 2 if self.current_mode == 1 else 1
         msg = "Mode 2: Distance" if self.current_mode == 2 else "Mode 1: Detection"
         self.speak(msg)
-        self.top_btn.text = msg
+        self.top_btn.text = f"TAP TO CHANGE MODE\n({msg} Active)"
 
     def check_close_app(self, instance):
         self.speak("Closing")
@@ -128,61 +168,71 @@ class VisionApp(App):
             except:
                 pass
 
-    def get_distance_cm(self, label, width_px):
+    def get_distance_cm(self, label, width_px, frame_w):
         real_w = self.KNOWN_WIDTHS.get(label, 30)
         return (real_w * self.FOCAL_LENGTH) / max(width_px, 1)
 
-    def analyze_frame(self, pixels, width, height, image_pos, image_size, texture):
+    def analyze_frame(self, pixels, *args):
         if not self.interpreter:
             return
 
         try:
-            # OPTIMIZED: Use 3 or 4 channels dynamically
+            if isinstance(args[0], (list, tuple)):
+                width, height = args[0]
+            else:
+                width = args[0]
+                height = args[1]
+
             channels = len(pixels) // (width * height)
             frame = np.frombuffer(pixels, dtype=np.uint8).reshape((height, width, channels))
-            rgb = frame[:, :, :3] # Take only RGB
+            rgb = frame[:, :, :3] 
             
-            # 1. Resize for YOLOv8
             img = Image.fromarray(rgb).resize((640, 640))
             input_data = np.expand_dims(np.array(img), axis=0).astype(np.float32) / 255.0
             
-            # Handle NCHW models
-            if self.input_details[0]['shape'][1] == 3:
+            if self.input_details[0]['shape'][1] == 3: 
                 input_data = np.transpose(input_data, (0, 3, 1, 2))
                 
-            # 2. Run Inference
             self.interpreter.set_tensor(self.input_details[0]['index'], input_data)
             self.interpreter.invoke()
             output = self.interpreter.get_tensor(self.output_details[0]['index'])[0]
             
-            # 3. FAST VECTORIZED PROCESSING (No slow 'for' loop)
-            output = output.transpose() # Shape: [8400, 84]
+            output = output.transpose() 
             scores = np.max(output[:, 4:], axis=1)
-            mask = scores > 0.45 # Threshold
+            # Threshold lowered to 0.35 for better detection
+            mask = scores > 0.35 
             
             if np.any(mask):
                 valid_boxes = output[mask]
                 valid_scores = scores[mask]
                 valid_class_ids = np.argmax(valid_boxes[:, 4:], axis=1)
                 
-                # Take the top detection for speech
-                top_idx = np.argmax(valid_scores)
-                label = self.class_names[valid_class_ids[top_idx]]
+                sort_idx = np.argsort(valid_scores)[::-1]
+                top_k = min(5, len(sort_idx))
+                best_boxes = valid_boxes[sort_idx][:top_k]
+                best_classes = valid_class_ids[sort_idx][:top_k]
                 
-                # Coordinate scaling
-                xc, yc, w, h = valid_boxes[top_idx][:4]
-                width_px = w * (width / 640)
-
-                # 4. Handle Speech with Cooldown
+                Clock.schedule_once(lambda dt: self.overlay.draw_boxes(best_boxes, best_classes, self.class_names, self.preview), 0)
+                
+                top_label = self.class_names[int(best_classes[0])]
                 now = time.time()
                 if now - self.last_speech_time > self.SPEECH_COOLDOWN:
                     if self.current_mode == 1:
-                        self.speak(f"I see a {label}")
+                        self.speak(f"I see a {top_label}")
                     else:
-                        dist = self.get_distance_cm(label, width_px)
-                        self.speak(f"{label} at {int(dist)} centimeters")
+                        xc, yc, w, h = best_boxes[0][:4]
+                        width_px = w * (width / 640)
+                        dist = self.get_distance_cm(top_label, width_px, width)
+                        self.speak(f"{top_label} at {int(dist)} centimeters")
                     self.last_speech_time = now
-                    Logger.info(f"AI: Detected {label}")
+            else:
+                # Clear overlay if nothing is found
+                Clock.schedule_once(lambda dt: self.overlay.canvas.clear(), 0)
+                def clear_labels(dt):
+                    for l in self.overlay.labels:
+                        self.overlay.remove_widget(l)
+                    self.overlay.labels.clear()
+                Clock.schedule_once(clear_labels, 0)
 
         except Exception as e:
             Logger.error(f"AI_ERROR: {e}")
