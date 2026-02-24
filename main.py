@@ -196,7 +196,7 @@ class VisionApp(App):
                     # --- NORMALIZATION & ROTATION FIX ---
                     # Use xc for normal horizontal tracking. 
                     # If Left/Right is swapped with Up/Down, change 'xc' to 'yc'.
-                    relative_pos = xc / 640.0 
+                    relative_pos = 1.0 - (xc / 640.0)
                     
                     if relative_pos < 0.35:
                         direction = "on your left"
