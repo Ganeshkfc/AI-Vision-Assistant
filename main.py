@@ -213,11 +213,7 @@ class VisionApp(App):
                     xc, yc, w, h = best_boxes[i][:4]
                     
                     # --- SMART DIRECTIONAL LOGIC ---
-                    # 1. First, check if xc is already a decimal (0-1). 
-                    # If it is, we DON'T divide by 640.
                     val = xc if xc <= 1.0 else xc / 640.0
-                    
-                    # 2. Use the "Mirror" fix you found successful before.
                     relative_pos = val 
                     
                     if relative_pos < 0.35:
@@ -243,7 +239,16 @@ class VisionApp(App):
                                 self.vibrate(150 if dist > 50 else 400)
 
                             if now - self.last_speech_time > self.SPEECH_COOLDOWN:
-                                speech_segments.append(f"{name} {direction}, {int(dist)} centimeters")
+                                # --- NEW DISTANCE LOGIC ---
+                                # 3 feet is approximately 91.44 cm
+                                if dist < 91.44:
+                                    dist_announcement = f"{int(dist)} centimeters"
+                                else:
+                                    # Convert to feet
+                                    dist_ft = dist / 30.48
+                                    dist_announcement = f"{dist_ft:.1f} feet"
+                                    
+                                speech_segments.append(f"{name} {direction}, {dist_announcement}")
 
                 if speech_segments:
                     self.speak(", ".join(speech_segments))
