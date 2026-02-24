@@ -32,7 +32,7 @@ class VisionApp(App):
     def build(self):
         self.current_mode = 1 
         self.KNOWN_WIDTHS = {'person': 50, 'chair': 45, 'bottle': 8, 'cell phone': 7}
-        self.FOCAL_LENGTH = 715 
+        self.FOCAL_LENGTH = 500 
         self.last_speech_time = 0
         self.SPEECH_COOLDOWN = 4 
         
@@ -122,7 +122,7 @@ class VisionApp(App):
     def _connect_camera(self, dt):
         try:
             self.preview.connect_camera(camera_id='back', enable_analyze_pixels=True)
-            Clock.schedule_once(lambda x: self.speak("Vision Activated"), 2)
+            Clock.schedule_once(lambda x: self.speak("Vision Activated"), 4)
         except Exception as e:
             Logger.error(f"CAMERA: Error {e}")
 
