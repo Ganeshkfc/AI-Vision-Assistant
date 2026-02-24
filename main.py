@@ -8,6 +8,7 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.widget import Widget
 from kivy.uix.label import Label
+from kivy.uix.slider import Slider
 from kivy.graphics import Color, Line
 from kivy.clock import Clock
 from kivy.utils import platform
@@ -27,46 +28,6 @@ except ImportError:
         tflite = None
         Logger.error("TFLite module not found!")
 
-class BBoxOverlay(Widget):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.labels = []
-
-    def draw_boxes(self, valid_boxes, valid_class_ids, class_names, preview_widget):
-        self.canvas.clear()
-        for lbl in self.labels:
-            self.remove_widget(lbl)
-        self.labels.clear()
-
-        pw, ph = preview_widget.size
-        px, py = preview_widget.pos
-
-        with self.canvas:
-            for i in range(len(valid_boxes)):
-                box = valid_boxes[i]
-                class_id = int(valid_class_ids[i])
-                label_name = class_names[class_id]
-
-                # FIX: Convert numpy values to standard Python floats to avoid the crash
-                xc, yc, w, h = map(float, box[:4])
-                
-                scale_x = pw / 640.0
-                scale_y = ph / 640.0
-                
-                w_px = w * scale_x
-                h_px = h * scale_y
-                x1_px = px + ((xc - w/2) * scale_x)
-                y1_px = py + ph - ((yc + h/2) * scale_y) 
-
-                Color(0, 1, 0, 1) 
-                Line(rectangle=(x1_px, y1_px, w_px, h_px), width=2)
-
-                # Create label with safe float coordinates
-                lbl = Label(text=label_name, pos=(float(x1_px), float(y1_px + h_px)), 
-                            size_hint=(None, None), size=(150, 40), color=(0,1,0,1))
-                self.add_widget(lbl)
-                self.labels.append(lbl)
-
 class VisionApp(App):
     def build(self):
         self.current_mode = 1 
@@ -81,20 +42,32 @@ class VisionApp(App):
         self.interpreter = None
 
         layout = BoxLayout(orientation='vertical')
+        
         self.top_btn = Button(
             text="TAP HERE TO CHANGE MODE\n(Mode 1: Detection Active)",
             background_color=(0.1, 0.5, 0.8, 1), font_size='20sp', size_hint_y=0.15, halign='center'
         )
         self.top_btn.bind(on_release=self.toggle_mode)
 
-        self.camera_container = FloatLayout()
+        # Middle section containing Slider (left) and Camera (right)
+        self.middle_layout = BoxLayout(orientation='horizontal')
+        
+        # Left side: Slider for adjusting confidence threshold
+        self.slider_layout = BoxLayout(orientation='vertical', size_hint_x=0.15)
+        self.slider_label = Label(text='35%', size_hint_y=0.1, font_size='18sp')
+        self.threshold_slider = Slider(orientation='vertical', min=1, max=100, value=35, size_hint_y=0.9)
+        self.threshold_slider.bind(value=self.on_slider_value_change)
+        
+        self.slider_layout.add_widget(self.slider_label)
+        self.slider_layout.add_widget(self.threshold_slider)
+
+        # Right side: Camera preview
         self.preview = Preview(aspect_ratio='16:9')
         self.preview.enable_analyze_pixels = True
         self.preview.analyze_pixels_callback = self.analyze_frame
         
-        self.overlay = BBoxOverlay()
-        self.camera_container.add_widget(self.preview)
-        self.camera_container.add_widget(self.overlay)
+        self.middle_layout.add_widget(self.slider_layout)
+        self.middle_layout.add_widget(self.preview)
 
         self.bottom_btn = Button(
             text="TAP HERE TO CLOSE APP",
@@ -103,9 +76,12 @@ class VisionApp(App):
         self.bottom_btn.bind(on_release=self.check_close_app)
 
         layout.add_widget(self.top_btn)
-        layout.add_widget(self.camera_container)
+        layout.add_widget(self.middle_layout)
         layout.add_widget(self.bottom_btn)
         return layout
+
+    def on_slider_value_change(self, instance, value):
+        self.slider_label.text = f"{int(value)}%"
 
     def on_start(self):
         if platform == 'android':
@@ -199,8 +175,10 @@ class VisionApp(App):
             
             output = output.transpose() 
             scores = np.max(output[:, 4:], axis=1)
-            # Threshold lowered to 0.35 for better detection
-            mask = scores > 0.35 
+            
+            # Use dynamic threshold from the UI slider
+            current_threshold = self.threshold_slider.value / 100.0
+            mask = scores > current_threshold 
             
             if np.any(mask):
                 valid_boxes = output[mask]
@@ -212,27 +190,32 @@ class VisionApp(App):
                 best_boxes = valid_boxes[sort_idx][:top_k]
                 best_classes = valid_class_ids[sort_idx][:top_k]
                 
-                Clock.schedule_once(lambda dt: self.overlay.draw_boxes(best_boxes, best_classes, self.class_names, self.preview), 0)
-                
-                top_label = self.class_names[int(best_classes[0])]
                 now = time.time()
                 if now - self.last_speech_time > self.SPEECH_COOLDOWN:
                     if self.current_mode == 1:
-                        self.speak(f"I see a {top_label}")
+                        # Mode 1: Announce multiple unique objects
+                        detected_names = []
+                        for class_id in best_classes:
+                            name = self.class_names[int(class_id)]
+                            if name not in detected_names:
+                                detected_names.append(name)
+                        
+                        if len(detected_names) == 1:
+                            speech_text = f"I see a {detected_names[0]}"
+                        elif len(detected_names) == 2:
+                            speech_text = f"I see a {detected_names[0]} and a {detected_names[1]}"
+                        else:
+                            speech_text = "I see a " + ", a ".join(detected_names[:-1]) + f", and a {detected_names[-1]}"
+                        
+                        self.speak(speech_text)
                     else:
+                        # Mode 2: Distance estimation for top object
+                        top_label = self.class_names[int(best_classes[0])]
                         xc, yc, w, h = best_boxes[0][:4]
                         width_px = w * (width / 640)
                         dist = self.get_distance_cm(top_label, width_px, width)
                         self.speak(f"{top_label} at {int(dist)} centimeters")
                     self.last_speech_time = now
-            else:
-                # Clear overlay if nothing is found
-                Clock.schedule_once(lambda dt: self.overlay.canvas.clear(), 0)
-                def clear_labels(dt):
-                    for l in self.overlay.labels:
-                        self.overlay.remove_widget(l)
-                    self.overlay.labels.clear()
-                Clock.schedule_once(clear_labels, 0)
 
         except Exception as e:
             Logger.error(f"AI_ERROR: {e}")
