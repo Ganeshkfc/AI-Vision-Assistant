@@ -43,7 +43,7 @@ class VisionApp(App):
         
         # TOP BUTTON
         self.top_btn = Button(
-            text="TAP TO CHANGE MODE\n(Mode 1: Object Detection)",
+            text="TAP HERE TO CHANGE MODE\n(Mode 1: Object Detection)",
             background_color=(0.1, 0.5, 0.8, 1), font_size='18sp', size_hint_y=0.15, halign='center'
         )
         self.top_btn.bind(on_release=self.toggle_mode)
@@ -53,8 +53,8 @@ class VisionApp(App):
         
         # Left Slider: Threshold
         self.slider_left = BoxLayout(orientation='vertical', size_hint_x=0.15)
-        self.slider_label = Label(text='35%', size_hint_y=0.1, font_size='16sp')
-        self.threshold_slider = Slider(orientation='vertical', min=1, max=100, value=35, size_hint_y=0.9)
+        self.slider_label = Label(text='45%', size_hint_y=0.1, font_size='16sp')
+        self.threshold_slider = Slider(orientation='vertical', min=1, max=100, value=45, size_hint_y=0.9)
         self.threshold_slider.bind(value=self.on_slider_value_change)
         self.slider_left.add_widget(self.slider_label)
         self.slider_left.add_widget(self.threshold_slider)
@@ -138,18 +138,18 @@ class VisionApp(App):
     def _connect_camera(self, dt):
         try:
             self.preview.connect_camera(camera_id='back', enable_analyze_pixels=True)
-            Clock.schedule_once(lambda x: self.speak("AI Vision Activated."), 2)
+            Clock.schedule_once(lambda x: self.speak("AI Vision Activated.Mode 1 active . detecting Multiple objects and direction. To change mode. Tap on your phone's top screen. To close the application. Tap on the bottom screen."), 2)
         except Exception as e:
             Logger.error(f"CAMERA: Error {e}")
 
     def toggle_mode(self, instance):
         self.current_mode = 2 if self.current_mode == 1 else 1
-        msg = "Distance Mode" if self.current_mode == 2 else "Object Mode"
+        msg = "Distance Mode enabled" if self.current_mode == 2 else " Direction Mode enabled"
         self.speak(msg)
         self.top_btn.text = f"TAP TO CHANGE MODE\n({msg} Active)"
 
     def check_close_app(self, instance):
-        self.speak("Closing")
+        self.speak("Closing application, Thank you.")
         self.preview.disconnect_camera()
         Clock.schedule_once(lambda dt: self.stop(), 0.5)
 
@@ -218,14 +218,14 @@ class VisionApp(App):
                     val = xc if xc <= 1.0 else xc / 640.0
                     
                     # 2. Use the "Mirror" fix you found successful before.
-                    relative_pos = 1.0 - val 
+                    relative_pos = val 
                     
                     if relative_pos < 0.35:
                         direction = "on your left"
                     elif relative_pos > 0.65:
                         direction = "on your right"
                     else:
-                        direction = "ahead"
+                        direction = "In front of you"
                     # -------------------------------
 
                     if self.current_mode == 1:
