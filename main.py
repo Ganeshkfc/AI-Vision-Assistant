@@ -32,7 +32,7 @@ class VisionApp(App):
     def build(self):
         self.current_mode = 1 
         self.KNOWN_WIDTHS = {'person': 50, 'chair': 45, 'bottle': 8, 'cell phone': 7}
-        self.FOCAL_LENGTH = 500 
+        self.FOCAL_LENGTH = 300 
         self.last_speech_time = 0
         self.SPEECH_COOLDOWN = 4 
         
@@ -54,8 +54,8 @@ class VisionApp(App):
         
         # Left side: Slider for adjusting confidence threshold
         self.slider_layout = BoxLayout(orientation='vertical', size_hint_x=0.15)
-        self.slider_label = Label(text='35%', size_hint_y=0.1, font_size='18sp')
-        self.threshold_slider = Slider(orientation='vertical', min=1, max=100, value=35, size_hint_y=0.9)
+        self.slider_label = Label(text='45%', size_hint_y=0.1, font_size='18sp')
+        self.threshold_slider = Slider(orientation='vertical', min=1, max=100, value=45, size_hint_y=0.9)
         self.threshold_slider.bind(value=self.on_slider_value_change)
         
         self.slider_layout.add_widget(self.slider_label)
@@ -122,18 +122,18 @@ class VisionApp(App):
     def _connect_camera(self, dt):
         try:
             self.preview.connect_camera(camera_id='back', enable_analyze_pixels=True)
-            Clock.schedule_once(lambda x: self.speak("Vision Activated"), 4)
+            Clock.schedule_once(lambda x: self.speak("AI Vision Activated. To change mode. Tap on your phone's top screen. To close the application. Tap on the bottom screen."), 3)
         except Exception as e:
             Logger.error(f"CAMERA: Error {e}")
 
     def toggle_mode(self, instance):
         self.current_mode = 2 if self.current_mode == 1 else 1
-        msg = "Mode 2: Distance" if self.current_mode == 2 else "Mode 1: Detection"
+        msg = "Mode 2: Distance" if self.current_mode == 2 else "Mode 1: Multiple object Detection"
         self.speak(msg)
         self.top_btn.text = f"TAP TO CHANGE MODE\n({msg} Active)"
 
     def check_close_app(self, instance):
-        self.speak("Closing")
+        self.speak("Closing application, Thank you.")
         self.preview.disconnect_camera()
         Clock.schedule_once(lambda dt: self.stop(), 0.5)
 
@@ -186,36 +186,46 @@ class VisionApp(App):
                 valid_class_ids = np.argmax(valid_boxes[:, 4:], axis=1)
                 
                 sort_idx = np.argsort(valid_scores)[::-1]
-                top_k = min(5, len(sort_idx))
+                # Limiting to top 3 objects to keep audio concise
+                top_k = min(3, len(sort_idx))
                 best_boxes = valid_boxes[sort_idx][:top_k]
                 best_classes = valid_class_ids[sort_idx][:top_k]
                 
                 now = time.time()
                 if now - self.last_speech_time > self.SPEECH_COOLDOWN:
-                    if self.current_mode == 1:
-                        # Mode 1: Announce multiple unique objects
-                        detected_names = []
-                        for class_id in best_classes:
-                            name = self.class_names[int(class_id)]
-                            if name not in detected_names:
-                                detected_names.append(name)
+                    speech_segments = []
+                    
+                    for i in range(len(best_classes)):
+                        class_id = int(best_classes[i])
+                        name = self.class_names[class_id]
+                        xc, yc, w, h = best_boxes[i][:4]
                         
-                        if len(detected_names) == 1:
-                            speech_text = f"I see a {detected_names[0]}"
-                        elif len(detected_names) == 2:
-                            speech_text = f"I see a {detected_names[0]} and a {detected_names[1]}"
+                        # Determine Direction based on the 640px model input width
+                        if xc < 213:
+                            direction = "on your left"
+                        elif xc > 427:
+                            direction = "on your right"
                         else:
-                            speech_text = "I see a " + ", a ".join(detected_names[:-1]) + f", and a {detected_names[-1]}"
-                        
-                        self.speak(speech_text)
-                    else:
-                        # Mode 2: Distance estimation for top object
-                        top_label = self.class_names[int(best_classes[0])]
-                        xc, yc, w, h = best_boxes[0][:4]
-                        width_px = w * (width / 640)
-                        dist = self.get_distance_cm(top_label, width_px, width)
-                        self.speak(f"{top_label} at {int(dist)} centimeters")
-                    self.last_speech_time = now
+                            direction = "ahead"
+
+                        if self.current_mode == 1:
+                            # Mode 1: Multiple objects with spatial directions
+                            segment = f"{name} {direction}"
+                            if segment not in speech_segments: # Prevents saying "person ahead" multiple times
+                                speech_segments.append(segment)
+                                
+                        else:
+                            # Mode 2: Distance estimation + direction for the top object
+                            if i == 0:
+                                width_px = w * (width / 640)
+                                dist = self.get_distance_cm(name, width_px, width)
+                                speech_segments.append(f"{name} {direction} at {int(dist)} centimeters")
+                                break # Only report the primary target for Mode 2
+                                
+                    if speech_segments:
+                        full_text = ", ".join(speech_segments)
+                        self.speak(full_text)
+                        self.last_speech_time = now
 
         except Exception as e:
             Logger.error(f"AI_ERROR: {e}")
