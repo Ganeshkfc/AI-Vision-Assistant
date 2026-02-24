@@ -41,17 +41,17 @@ class VisionApp(App):
 
         layout = BoxLayout(orientation='vertical')
         
-        # --- TOP BUTTON ---
+        # TOP BUTTON
         self.top_btn = Button(
             text="TAP TO CHANGE MODE\n(Mode 1: Object Detection)",
             background_color=(0.1, 0.5, 0.8, 1), font_size='18sp', size_hint_y=0.15, halign='center'
         )
         self.top_btn.bind(on_release=self.toggle_mode)
 
-        # --- MIDDLE SECTION (Slider - Camera - Slider) ---
+        # MIDDLE SECTION
         self.middle_layout = BoxLayout(orientation='horizontal')
         
-        # Left Slider: Confidence Threshold
+        # Left Slider: Threshold
         self.slider_left = BoxLayout(orientation='vertical', size_hint_x=0.15)
         self.slider_label = Label(text='35%', size_hint_y=0.1, font_size='16sp')
         self.threshold_slider = Slider(orientation='vertical', min=1, max=100, value=35, size_hint_y=0.9)
@@ -59,7 +59,7 @@ class VisionApp(App):
         self.slider_left.add_widget(self.slider_label)
         self.slider_left.add_widget(self.threshold_slider)
 
-        # Center: Camera Preview
+        # Center: Camera
         self.preview = Preview(aspect_ratio='16:9')
         self.preview.enable_analyze_pixels = True
         self.preview.analyze_pixels_callback = self.analyze_frame
@@ -76,7 +76,7 @@ class VisionApp(App):
         self.middle_layout.add_widget(self.preview)
         self.middle_layout.add_widget(self.slider_right)
 
-        # --- BOTTOM BUTTON ---
+        # BOTTOM BUTTON
         self.bottom_btn = Button(
             text="TAP HERE TO CLOSE APP",
             background_color=(0.8, 0.2, 0.2, 1), font_size='20sp', size_hint_y=0.15, halign='center'
@@ -104,7 +104,6 @@ class VisionApp(App):
                 Context = autoclass('android.content.Context')
                 self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
                 self.vibrator = PythonActivity.mActivity.getSystemService(Context.VIBRATOR_SERVICE)
-                # Set initial speed after a short delay to ensure TTS is ready
                 Clock.schedule_once(lambda dt: self.tts.setSpeechRate(self.speed_slider.value) if self.tts else None, 1.5)
             except Exception as e:
                 Logger.error(f"Android Services Error: {e}")
@@ -213,10 +212,13 @@ class VisionApp(App):
                     name = self.class_names[class_id]
                     xc, yc, w, h = best_boxes[i][:4]
                     
-                    # --- FIXED SPATIAL LOGIC (yc = Horizontal for Portrait) ---
-                    # The formula for relative position is:
-                    # $$relative\_pos = \frac{yc}{640}$$
-                    relative_pos = yc / 640.0 
+                    # --- SMART DIRECTIONAL LOGIC ---
+                    # 1. First, check if xc is already a decimal (0-1). 
+                    # If it is, we DON'T divide by 640.
+                    val = xc if xc <= 1.0 else xc / 640.0
+                    
+                    # 2. Use the "Mirror" fix you found successful before.
+                    relative_pos = 1.0 - val 
                     
                     if relative_pos < 0.35:
                         direction = "on your left"
@@ -224,7 +226,7 @@ class VisionApp(App):
                         direction = "on your right"
                     else:
                         direction = "ahead"
-                    # -----------------------------------------------------------
+                    # -------------------------------
 
                     if self.current_mode == 1:
                         if now - self.last_speech_time > self.SPEECH_COOLDOWN:
@@ -233,8 +235,8 @@ class VisionApp(App):
                                 speech_segments.append(segment)
                     else:
                         if i == 0:
-                            # Use 'h' (height) as width when camera is rotated
-                            width_px = h * (width / 640) 
+                            # Use w for horizontal distance
+                            width_px = w if w > 1.0 else w * 640
                             dist = self.get_distance_cm(name, width_px, width)
                             
                             if dist < 100:
