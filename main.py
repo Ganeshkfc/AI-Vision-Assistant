@@ -239,16 +239,15 @@ class VisionApp(App):
                                 self.vibrate(150 if dist > 50 else 400)
 
                             if now - self.last_speech_time > self.SPEECH_COOLDOWN:
-                                # --- NEW DISTANCE LOGIC ---
-                                # 3 feet is approximately 91.44 cm
-                                if dist < 91.44:
-                                    dist_announcement = f"{int(dist)} centimeters"
+                                # --- FEET vs CM LOGIC ---
+                                # 3 feet = 91.44 cm. We use 92 for safety.
+                                if dist < 92:
+                                    dist_msg = f"{int(dist)} centimeters"
                                 else:
-                                    # Convert to feet
                                     dist_ft = dist / 30.48
-                                    dist_announcement = f"{dist_ft:.1f} feet"
-                                    
-                                speech_segments.append(f"{name} {direction}, {dist_announcement}")
+                                    dist_msg = f"{dist_ft:.1f} feet"
+                                
+                                speech_segments.append(f"{name} {direction}, {dist_msg}")
 
                 if speech_segments:
                     self.speak(", ".join(speech_segments))
