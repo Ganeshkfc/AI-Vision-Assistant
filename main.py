@@ -19,20 +19,29 @@ if platform == 'android':
 try:
     import tflite_runtime.interpreter as tflite
 except ImportError:
-    import tensorflow.lite as tflite
+    try:
+        import tensorflow.lite as tflite
+    except ImportError:
+        tflite = None
+        Logger.error("TFLite module not found!")
 
 class VisionApp(App):
     def build(self):
         self.current_mode = 1 
-        self.METRIC_THRESHOLD_CM = 92 # 3 Feet threshold
-        self.KNOWN_WIDTHS = {'person': 55, 'chair': 50, 'bottle': 9, 'cell phone': 8, 'tv': 75}
-        
-        # INCREASE THIS NUMBER if the AI says objects are CLOSER than they really are
-        # DECREASE THIS NUMBER if the AI says objects are FURTHER than they really are
-        self.FOCAL_LENGTH = 1600 
-        
+        # Refined KNOWN_WIDTHS (in cm) for better accuracy
+        self.KNOWN_WIDTHS = {
+            'person': 55, 
+            'chair': 50, 
+            'bottle': 9, 
+            'cell phone': 8, 
+            'tv': 75, 
+            'laptop': 38,
+            'backpack': 35
+        }
+        # Increased Focal Length to 1200 to fix underestimation of distance
+        self.FOCAL_LENGTH = 1400 
         self.last_speech_time = 0
-        self.SPEECH_COOLDOWN = 3.5 
+        self.SPEECH_COOLDOWN = 4 
         
         self.class_names = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
 
@@ -41,121 +50,210 @@ class VisionApp(App):
         self.interpreter = None
 
         layout = BoxLayout(orientation='vertical')
-        self.top_btn = Button(text="MODE 1: DETECTION", background_color=(0.1, 0.5, 0.8, 1), size_hint_y=0.15)
+        
+        self.top_btn = Button(
+            text="TAP HERE TO CHANGE MODE\n(Mode 1: Object Detection)",
+            background_color=(0.1, 0.5, 0.8, 1), font_size='18sp', size_hint_y=0.15, halign='center'
+        )
         self.top_btn.bind(on_release=self.toggle_mode)
+
+        self.middle_layout = BoxLayout(orientation='horizontal')
+        
+        self.slider_left = BoxLayout(orientation='vertical', size_hint_x=0.15)
+        self.slider_label = Label(text='45%', size_hint_y=0.1, font_size='16sp')
+        self.threshold_slider = Slider(orientation='vertical', min=1, max=100, value=45, size_hint_y=0.9)
+        self.threshold_slider.bind(value=self.on_slider_value_change)
+        self.slider_left.add_widget(self.slider_label)
+        self.slider_left.add_widget(self.threshold_slider)
 
         self.preview = Preview(aspect_ratio='16:9')
         self.preview.enable_analyze_pixels = True
         self.preview.analyze_pixels_callback = self.analyze_frame
+        
+        self.slider_right = BoxLayout(orientation='vertical', size_hint_x=0.15)
+        self.speed_label = Label(text='0.8x', size_hint_y=0.1, font_size='16sp')
+        self.speed_slider = Slider(orientation='vertical', min=0.5, max=2.0, value=0.8, size_hint_y=0.9)
+        self.speed_slider.bind(value=self.on_speed_change)
+        self.slider_right.add_widget(self.speed_label)
+        self.slider_right.add_widget(self.speed_slider)
 
-        self.bottom_btn = Button(text="EXIT APP", background_color=(0.8, 0.2, 0.2, 1), size_hint_y=0.15)
+        self.middle_layout.add_widget(self.slider_left)
+        self.middle_layout.add_widget(self.preview)
+        self.middle_layout.add_widget(self.slider_right)
+
+        self.bottom_btn = Button(
+            text="TAP HERE TO CLOSE APP",
+            background_color=(0.8, 0.2, 0.2, 1), font_size='20sp', size_hint_y=0.15, halign='center'
+        )
         self.bottom_btn.bind(on_release=self.check_close_app)
 
         layout.add_widget(self.top_btn)
-        layout.add_widget(self.preview)
+        layout.add_widget(self.middle_layout)
         layout.add_widget(self.bottom_btn)
         return layout
 
+    def on_slider_value_change(self, instance, value):
+        self.slider_label.text = f"{int(value)}%"
+
+    def on_speed_change(self, instance, value):
+        self.speed_label.text = f"{value:.1f}x"
+        if self.tts:
+            try: self.tts.setSpeechRate(float(value))
+            except: pass
+
     def on_start(self):
         if platform == 'android':
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
-            self.vibrator = PythonActivity.mActivity.getSystemService(autoclass('android.content.Context').VIBRATOR_SERVICE)
+            try:
+                PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                Context = autoclass('android.content.Context')
+                self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
+                self.vibrator = PythonActivity.mActivity.getSystemService(Context.VIBRATOR_SERVICE)
+                Clock.schedule_once(lambda dt: self.tts.setSpeechRate(self.speed_slider.value) if self.tts else None, 1.5)
+            except Exception as e:
+                Logger.error(f"Android Services Error: {e}")
+
+        Clock.schedule_once(self.load_model, 0.5)
+        if platform == 'android':
             perms = [Permission.CAMERA, Permission.VIBRATE]
-            request_permissions(perms, lambda p, g: self.preview.connect_camera(enable_analyze_pixels=True))
-        
-        Clock.schedule_once(self.load_model, 1)
+            request_permissions(perms, self.on_permission_result)
+        else:
+            self.start_camera()
 
     def load_model(self, dt):
-        path = os.path.join(os.path.dirname(__file__), "yolov8n_float32.tflite")
-        self.interpreter = tflite.Interpreter(model_path=path)
-        self.interpreter.allocate_tensors()
-        self.input_details = self.interpreter.get_input_details()
-        self.output_details = self.interpreter.get_output_details()
+        cur_dir = os.path.dirname(os.path.abspath(__file__))
+        model_path = os.path.join(cur_dir, "yolov8n_float32.tflite")
+        if os.path.exists(model_path) and tflite:
+            try:
+                self.interpreter = tflite.Interpreter(model_path=model_path)
+                self.interpreter.allocate_tensors()
+                self.input_details = self.interpreter.get_input_details()
+                self.output_details = self.interpreter.get_output_details()
+            except Exception as e:
+                Logger.error(f"MODEL: Load Error: {e}")
+
+    def on_permission_result(self, permissions, grants):
+        if all(grants):
+            self.start_camera()
+
+    def start_camera(self):
+        Clock.schedule_once(self._connect_camera, 1)
+
+    def _connect_camera(self, dt):
+        try:
+            self.preview.connect_camera(camera_id='back', enable_analyze_pixels=True)
+            self.speak("System ready. Mode 1 active.")
+        except Exception as e:
+            Logger.error(f"CAMERA: Error {e}")
 
     def toggle_mode(self, instance):
         self.current_mode = 2 if self.current_mode == 1 else 1
         msg = "Distance Mode" if self.current_mode == 2 else "Direction Mode"
-        self.speak(msg)
-        self.top_btn.text = f"ACTIVE: {msg}"
+        self.speak(msg + " enabled")
+        self.top_btn.text = f"TAP TO CHANGE MODE\n({msg} Active)"
+
+    def check_close_app(self, instance):
+        self.speak("Closing application")
+        self.preview.disconnect_camera()
+        Clock.schedule_once(lambda dt: self.stop(), 0.5)
 
     def speak(self, text):
-        if self.tts: self.tts.speak(text, 1, None)
+        if self.tts:
+            try: 
+                # Use QUEUE_ADD (1) to prevent cutting off speech
+                self.tts.speak(text, 1, None)
+            except: pass
 
-    def get_distance_cm(self, label, width_px):
-        real_w = self.KNOWN_WIDTHS.get(label, 35)
+    def vibrate(self, duration_ms):
+        if self.vibrator:
+            try: self.vibrator.vibrate(duration_ms)
+            except: pass
+
+    def get_distance_cm(self, label, width_px, frame_w):
+        # Uses triangular similarity: Distance = (RealWidth * FocalLength) / PixelWidth
+        real_w = self.KNOWN_WIDTHS.get(label, 30)
         return (real_w * self.FOCAL_LENGTH) / max(width_px, 1)
 
     def analyze_frame(self, pixels, *args):
         if not self.interpreter: return
         try:
-            width, height = args[0] if isinstance(args[0], (list, tuple)) else (args[0], args[1])
-            frame = np.frombuffer(pixels, dtype=np.uint8).reshape((height, width, 4))[:, :, :3]
-            img = Image.fromarray(frame).resize((640, 640))
+            if isinstance(args[0], (list, tuple)):
+                width, height = args[0]
+            else:
+                width, height = args[0], args[1]
+
+            channels = len(pixels) // (width * height)
+            frame = np.frombuffer(pixels, dtype=np.uint8).reshape((height, width, channels))
+            rgb = frame[:, :, :3] 
+            img = Image.fromarray(rgb).resize((640, 640))
             input_data = np.expand_dims(np.array(img), axis=0).astype(np.float32) / 255.0
             
-            if self.input_details[0]['shape'][1] == 3: input_data = np.transpose(input_data, (0, 3, 1, 2))
+            if self.input_details[0]['shape'][1] == 3: 
+                input_data = np.transpose(input_data, (0, 3, 1, 2))
+                
             self.interpreter.set_tensor(self.input_details[0]['index'], input_data)
             self.interpreter.invoke()
             output = self.interpreter.get_tensor(self.output_details[0]['index'])[0].transpose()
             
             scores = np.max(output[:, 4:], axis=1)
-            mask = scores > 0.45
+            current_threshold = self.threshold_slider.value / 100.0
+            mask = scores > current_threshold 
             
             if np.any(mask):
                 valid_boxes = output[mask]
-                valid_ids = np.argmax(valid_boxes[:, 4:], axis=1)
-                now = time.time()
-
-                if self.current_mode == 2:
-                    # --- YOUR LOGIC: FIND OBJECT CLOSEST TO CENTER ---
-                    best_idx = -1
-                    min_dist_to_center = float('inf')
-                    
-                    for i in range(len(valid_boxes)):
-                        xc = valid_boxes[i][0] # Center X from model (0 to 640)
-                        dist_to_center = abs(xc - 320) # 320 is middle of 640
-                        if dist_to_center < min_dist_to_center:
-                            min_dist_to_center = dist_to_center
-                            best_idx = i
-
-                    if best_idx != -1 and (now - self.last_speech_time > self.SPEECH_COOLDOWN):
-                        box = valid_boxes[best_idx]
-                        name = self.class_names[valid_ids[best_idx]]
-                        
-                        # Calculate Pixel Width (x2 - x1)
-                        # In YOLO output, index 2 is width
-                        pixel_w = box[2] 
-                        d_cm = self.get_distance_cm(name, pixel_w)
-
-                        # Determine Direction
-                        xc = box[0]
-                        if xc < 213: dir_s = "on your left"
-                        elif xc < 426: dir_s = "in front of you"
-                        else: dir_s = "on your right"
-
-                        # --- YOUR UNIT CONVERSION LOGIC ---
-                        if d_cm < self.METRIC_THRESHOLD_CM:
-                            d_str = f"{int(d_cm)} centimeters"
-                        else:
-                            d_feet = round(d_cm / 30.48, 1)
-                            d_str = f"{d_feet} feet"
-
-                        self.speak(f"{name} {dir_s}, {d_str}")
-                        self.last_speech_time = now
+                valid_scores = scores[mask]
+                valid_class_ids = np.argmax(valid_boxes[:, 4:], axis=1)
                 
-                elif self.current_mode == 1:
-                    # Normal detection for top 2 items
-                    if now - self.last_speech_time > self.SPEECH_COOLDOWN:
-                        top_names = [self.class_names[valid_ids[j]] for j in range(min(2, len(valid_ids)))]
-                        self.speak(f"Objects: {', '.join(top_names)}")
-                        self.last_speech_time = now
+                sort_idx = np.argsort(valid_scores)[::-1]
+                top_k = min(3, len(sort_idx))
+                best_boxes = valid_boxes[sort_idx][:top_k]
+                best_classes = valid_class_ids[sort_idx][:top_k]
+                
+                now = time.time()
+                speech_segments = []
+
+                for i in range(len(best_classes)):
+                    class_id = int(best_classes[i])
+                    name = self.class_names[class_id]
+                    xc, yc, w, h = best_boxes[i][:4]
+                    
+                    val = xc if xc <= 1.0 else xc / 640.0
+                    relative_pos = val 
+                    
+                    if relative_pos < 0.35: direction = "on your left"
+                    elif relative_pos > 0.65: direction = "on your right"
+                    else: direction = "In front of you"
+
+                    if self.current_mode == 1:
+                        if now - self.last_speech_time > self.SPEECH_COOLDOWN:
+                            segment = f"{name} {direction}"
+                            if segment not in speech_segments:
+                                speech_segments.append(segment)
+                    else:
+                        if i == 0:
+                            # Distance calculation using object width in pixels
+                            width_px = w if w > 1.0 else w * 640
+                            dist_cm = self.get_distance_cm(name, width_px, width)
+                            
+                            if dist_cm < 100:
+                                self.vibrate(150 if dist_cm > 50 else 400)
+
+                            if now - self.last_speech_time > self.SPEECH_COOLDOWN:
+                                # Logic to switch between cm and feet based on 3ft (91.44cm) threshold
+                                if dist_cm < 91.44:
+                                    dist_str = f"{int(dist_cm)} centimeters"
+                                else:
+                                    # Convert CM to Feet
+                                    feet_val = dist_cm / 30.48
+                                    dist_str = f"{feet_val:.1f} feet"
+                                
+                                speech_segments.append(f"{name} {direction}, {dist_str}")
+
+                if speech_segments:
+                    self.speak(", ".join(speech_segments))
+                    self.last_speech_time = now
 
         except Exception as e:
-            Logger.error(f"AI Error: {e}")
-
-    def check_close_app(self, instance):
-        self.stop()
+            Logger.error(f"AI_ERROR: {e}")
 
 if __name__ == "__main__":
     VisionApp().run()
