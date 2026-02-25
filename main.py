@@ -28,8 +28,10 @@ except ImportError:
 class VisionApp(App):
     def build(self):
         self.current_mode = 1 
-        self.KNOWN_WIDTHS = {'person': 50, 'chair': 45, 'bottle': 8, 'cell phone': 7}
-        self.FOCAL_LENGTH = 300 
+        # KNOWN_WIDTHS in cm
+        self.KNOWN_WIDTHS = {'person': 50, 'chair': 45, 'bottle': 8, 'cell phone': 7, 'tv': 60, 'laptop': 35}
+        # Increased Focal Length for better accuracy on 640px frames
+        self.FOCAL_LENGTH = 700 
         self.last_speech_time = 0
         self.SPEECH_COOLDOWN = 3 
         
@@ -41,17 +43,14 @@ class VisionApp(App):
 
         layout = BoxLayout(orientation='vertical')
         
-        # TOP BUTTON
         self.top_btn = Button(
             text="TAP HERE TO CHANGE MODE\n(Mode 1: Object Detection)",
             background_color=(0.1, 0.5, 0.8, 1), font_size='18sp', size_hint_y=0.15, halign='center'
         )
         self.top_btn.bind(on_release=self.toggle_mode)
 
-        # MIDDLE SECTION
         self.middle_layout = BoxLayout(orientation='horizontal')
         
-        # Left Slider: Threshold
         self.slider_left = BoxLayout(orientation='vertical', size_hint_x=0.15)
         self.slider_label = Label(text='45%', size_hint_y=0.1, font_size='16sp')
         self.threshold_slider = Slider(orientation='vertical', min=1, max=100, value=45, size_hint_y=0.9)
@@ -59,12 +58,10 @@ class VisionApp(App):
         self.slider_left.add_widget(self.slider_label)
         self.slider_left.add_widget(self.threshold_slider)
 
-        # Center: Camera
         self.preview = Preview(aspect_ratio='16:9')
         self.preview.enable_analyze_pixels = True
         self.preview.analyze_pixels_callback = self.analyze_frame
         
-        # Right Slider: Voice Speed
         self.slider_right = BoxLayout(orientation='vertical', size_hint_x=0.15)
         self.speed_label = Label(text='0.8x', size_hint_y=0.1, font_size='16sp')
         self.speed_slider = Slider(orientation='vertical', min=0.5, max=2.0, value=0.8, size_hint_y=0.9)
@@ -76,7 +73,6 @@ class VisionApp(App):
         self.middle_layout.add_widget(self.preview)
         self.middle_layout.add_widget(self.slider_right)
 
-        # BOTTOM BUTTON
         self.bottom_btn = Button(
             text="TAP HERE TO CLOSE APP",
             background_color=(0.8, 0.2, 0.2, 1), font_size='20sp', size_hint_y=0.15, halign='center'
@@ -138,18 +134,18 @@ class VisionApp(App):
     def _connect_camera(self, dt):
         try:
             self.preview.connect_camera(camera_id='back', enable_analyze_pixels=True)
-            Clock.schedule_once(lambda x: self.speak("AI Vision Activated.Mode 1 active . detecting Multiple objects and direction. To change mode. Tap on your phone's top screen. To close the application. Tap on the bottom screen."), 2)
+            Clock.schedule_once(lambda x: self.speak("AI Vision Activated."), 2)
         except Exception as e:
             Logger.error(f"CAMERA: Error {e}")
 
     def toggle_mode(self, instance):
         self.current_mode = 2 if self.current_mode == 1 else 1
-        msg = "Distance Mode enabled" if self.current_mode == 2 else " Direction Mode enabled"
+        msg = "Distance Mode enabled" if self.current_mode == 2 else "Direction Mode enabled"
         self.speak(msg)
         self.top_btn.text = f"TAP TO CHANGE MODE\n({msg} Active)"
 
     def check_close_app(self, instance):
-        self.speak("Closing application, Thank you.")
+        self.speak("Closing application")
         self.preview.disconnect_camera()
         Clock.schedule_once(lambda dt: self.stop(), 0.5)
 
@@ -212,7 +208,6 @@ class VisionApp(App):
                     name = self.class_names[class_id]
                     xc, yc, w, h = best_boxes[i][:4]
                     
-                    # --- SMART DIRECTIONAL LOGIC ---
                     val = xc if xc <= 1.0 else xc / 640.0
                     relative_pos = val 
                     
@@ -222,7 +217,6 @@ class VisionApp(App):
                         direction = "on your right"
                     else:
                         direction = "In front of you"
-                    # -------------------------------
 
                     if self.current_mode == 1:
                         if now - self.last_speech_time > self.SPEECH_COOLDOWN:
@@ -231,21 +225,22 @@ class VisionApp(App):
                                 speech_segments.append(segment)
                     else:
                         if i == 0:
-                            # Use w for horizontal distance
                             width_px = w if w > 1.0 else w * 640
                             dist = self.get_distance_cm(name, width_px, width)
                             
+                            # Debug log to see the number in Kivy
+                            Logger.info(f"DISTANCE_CALC: {name} is {dist:.2f} cm away")
+
                             if dist < 100:
                                 self.vibrate(150 if dist > 50 else 400)
 
                             if now - self.last_speech_time > self.SPEECH_COOLDOWN:
-                                # --- FEET vs CM LOGIC ---
-                                # 3 feet = 91.44 cm. We use 92 for safety.
-                                if dist < 92:
-                                    dist_msg = f"{int(dist)} centimeters"
+                                # --- FIXED FEET LOGIC (3 feet = 91.44 cm) ---
+                                if dist >= 91.44:
+                                    feet = dist / 30.48
+                                    dist_msg = f"{feet:.1f} feet"
                                 else:
-                                    dist_ft = dist / 30.48
-                                    dist_msg = f"{dist_ft:.1f} feet"
+                                    dist_msg = f"{int(dist)} centimeters"
                                 
                                 speech_segments.append(f"{name} {direction}, {dist_msg}")
 
