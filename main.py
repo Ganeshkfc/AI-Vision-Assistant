@@ -28,12 +28,11 @@ except ImportError:
 class VisionApp(App):
     def build(self):
         self.current_mode = 1 
-        # KNOWN_WIDTHS in cm
-        self.KNOWN_WIDTHS = {'person': 50, 'chair': 45, 'bottle': 8, 'cell phone': 7, 'tv': 60, 'laptop': 35}
-        # Increased Focal Length for better accuracy on 640px frames
-        self.FOCAL_LENGTH = 700 
+        self.KNOWN_WIDTHS = {'person': 50, 'chair': 45, 'bottle': 8, 'cell phone': 7, 'tv': 60}
+        # Adjusted Focal Length for typical smartphone wide-angle lenses
+        self.FOCAL_LENGTH = 900 
         self.last_speech_time = 0
-        self.SPEECH_COOLDOWN = 3 
+        self.SPEECH_COOLDOWN = 4 # Increased slightly to prevent overlapping
         
         self.class_names = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
 
@@ -98,6 +97,7 @@ class VisionApp(App):
             try:
                 PythonActivity = autoclass('org.kivy.android.PythonActivity')
                 Context = autoclass('android.content.Context')
+                # Initialize TTS
                 self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
                 self.vibrator = PythonActivity.mActivity.getSystemService(Context.VIBRATOR_SERVICE)
                 Clock.schedule_once(lambda dt: self.tts.setSpeechRate(self.speed_slider.value) if self.tts else None, 1.5)
@@ -120,7 +120,6 @@ class VisionApp(App):
                 self.interpreter.allocate_tensors()
                 self.input_details = self.interpreter.get_input_details()
                 self.output_details = self.interpreter.get_output_details()
-                Logger.info("MODEL: Loaded Successfully!")
             except Exception as e:
                 Logger.error(f"MODEL: Load Error: {e}")
 
@@ -134,14 +133,14 @@ class VisionApp(App):
     def _connect_camera(self, dt):
         try:
             self.preview.connect_camera(camera_id='back', enable_analyze_pixels=True)
-            Clock.schedule_once(lambda x: self.speak("AI Vision Activated."), 2)
+            self.speak("System ready. Mode 1 active.")
         except Exception as e:
             Logger.error(f"CAMERA: Error {e}")
 
     def toggle_mode(self, instance):
         self.current_mode = 2 if self.current_mode == 1 else 1
-        msg = "Distance Mode enabled" if self.current_mode == 2 else "Direction Mode enabled"
-        self.speak(msg)
+        msg = "Distance Mode" if self.current_mode == 2 else "Direction Mode"
+        self.speak(msg + " enabled")
         self.top_btn.text = f"TAP TO CHANGE MODE\n({msg} Active)"
 
     def check_close_app(self, instance):
@@ -151,7 +150,9 @@ class VisionApp(App):
 
     def speak(self, text):
         if self.tts:
-            try: self.tts.speak(text, 0, None)
+            try: 
+                # CHANGED: Using 1 (QUEUE_ADD) instead of 0 (QUEUE_FLUSH) to prevent cutting off
+                self.tts.speak(text, 1, None)
             except: pass
 
     def vibrate(self, duration_ms):
@@ -165,7 +166,6 @@ class VisionApp(App):
 
     def analyze_frame(self, pixels, *args):
         if not self.interpreter: return
-
         try:
             if isinstance(args[0], (list, tuple)):
                 width, height = args[0]
@@ -175,7 +175,6 @@ class VisionApp(App):
             channels = len(pixels) // (width * height)
             frame = np.frombuffer(pixels, dtype=np.uint8).reshape((height, width, channels))
             rgb = frame[:, :, :3] 
-            
             img = Image.fromarray(rgb).resize((640, 640))
             input_data = np.expand_dims(np.array(img), axis=0).astype(np.float32) / 255.0
             
@@ -211,12 +210,9 @@ class VisionApp(App):
                     val = xc if xc <= 1.0 else xc / 640.0
                     relative_pos = val 
                     
-                    if relative_pos < 0.35:
-                        direction = "on your left"
-                    elif relative_pos > 0.65:
-                        direction = "on your right"
-                    else:
-                        direction = "In front of you"
+                    if relative_pos < 0.35: direction = "on your left"
+                    elif relative_pos > 0.65: direction = "on your right"
+                    else: direction = "In front of you"
 
                     if self.current_mode == 1:
                         if now - self.last_speech_time > self.SPEECH_COOLDOWN:
@@ -225,24 +221,22 @@ class VisionApp(App):
                                 speech_segments.append(segment)
                     else:
                         if i == 0:
+                            # Width Calculation
                             width_px = w if w > 1.0 else w * 640
-                            dist = self.get_distance_cm(name, width_px, width)
+                            dist_cm = self.get_distance_cm(name, width_px, width)
                             
-                            # Debug log to see the number in Kivy
-                            Logger.info(f"DISTANCE_CALC: {name} is {dist:.2f} cm away")
-
-                            if dist < 100:
-                                self.vibrate(150 if dist > 50 else 400)
+                            if dist_cm < 100:
+                                self.vibrate(150 if dist_cm > 50 else 400)
 
                             if now - self.last_speech_time > self.SPEECH_COOLDOWN:
-                                # --- FIXED FEET LOGIC (3 feet = 91.44 cm) ---
-                                if dist >= 91.44:
-                                    feet = dist / 30.48
-                                    dist_msg = f"{feet:.1f} feet"
+                                # --- FORCED FEET LOGIC (3 feet = 91.44 cm) ---
+                                if dist_cm < 91.44:
+                                    dist_str = f"{int(dist_cm)} centimeters"
                                 else:
-                                    dist_msg = f"{int(dist)} centimeters"
+                                    feet_val = dist_cm / 30.48
+                                    dist_str = f"{feet_val:.1f} feet"
                                 
-                                speech_segments.append(f"{name} {direction}, {dist_msg}")
+                                speech_segments.append(f"{name} {direction}, {dist_str}")
 
                 if speech_segments:
                     self.speak(", ".join(speech_segments))
