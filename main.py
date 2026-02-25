@@ -28,11 +28,20 @@ except ImportError:
 class VisionApp(App):
     def build(self):
         self.current_mode = 1 
-        self.KNOWN_WIDTHS = {'person': 50, 'chair': 45, 'bottle': 8, 'cell phone': 7, 'tv': 60}
-        # Adjusted Focal Length for typical smartphone wide-angle lenses
-        self.FOCAL_LENGTH = 900 
+        # Refined KNOWN_WIDTHS (in cm) for better accuracy
+        self.KNOWN_WIDTHS = {
+            'person': 55, 
+            'chair': 50, 
+            'bottle': 9, 
+            'cell phone': 8, 
+            'tv': 75, 
+            'laptop': 38,
+            'backpack': 35
+        }
+        # Increased Focal Length to 1200 to fix underestimation of distance
+        self.FOCAL_LENGTH = 1200 
         self.last_speech_time = 0
-        self.SPEECH_COOLDOWN = 4 # Increased slightly to prevent overlapping
+        self.SPEECH_COOLDOWN = 4 
         
         self.class_names = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
 
@@ -97,7 +106,6 @@ class VisionApp(App):
             try:
                 PythonActivity = autoclass('org.kivy.android.PythonActivity')
                 Context = autoclass('android.content.Context')
-                # Initialize TTS
                 self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
                 self.vibrator = PythonActivity.mActivity.getSystemService(Context.VIBRATOR_SERVICE)
                 Clock.schedule_once(lambda dt: self.tts.setSpeechRate(self.speed_slider.value) if self.tts else None, 1.5)
@@ -151,7 +159,7 @@ class VisionApp(App):
     def speak(self, text):
         if self.tts:
             try: 
-                # CHANGED: Using 1 (QUEUE_ADD) instead of 0 (QUEUE_FLUSH) to prevent cutting off
+                # Use QUEUE_ADD (1) to prevent cutting off speech
                 self.tts.speak(text, 1, None)
             except: pass
 
@@ -161,6 +169,7 @@ class VisionApp(App):
             except: pass
 
     def get_distance_cm(self, label, width_px, frame_w):
+        # Uses triangular similarity: Distance = (RealWidth * FocalLength) / PixelWidth
         real_w = self.KNOWN_WIDTHS.get(label, 30)
         return (real_w * self.FOCAL_LENGTH) / max(width_px, 1)
 
@@ -221,7 +230,7 @@ class VisionApp(App):
                                 speech_segments.append(segment)
                     else:
                         if i == 0:
-                            # Width Calculation
+                            # Distance calculation using object width in pixels
                             width_px = w if w > 1.0 else w * 640
                             dist_cm = self.get_distance_cm(name, width_px, width)
                             
@@ -229,10 +238,11 @@ class VisionApp(App):
                                 self.vibrate(150 if dist_cm > 50 else 400)
 
                             if now - self.last_speech_time > self.SPEECH_COOLDOWN:
-                                # --- FORCED FEET LOGIC (3 feet = 91.44 cm) ---
+                                # Logic to switch between cm and feet based on 3ft (91.44cm) threshold
                                 if dist_cm < 91.44:
                                     dist_str = f"{int(dist_cm)} centimeters"
                                 else:
+                                    # Convert CM to Feet
                                     feet_val = dist_cm / 30.48
                                     dist_str = f"{feet_val:.1f} feet"
                                 
