@@ -29,10 +29,13 @@ class VisionApp(App):
     def build(self):
         self.current_mode = 1 
         self.KNOWN_WIDTHS = {'person': 50, 'chair': 45, 'bottle': 8, 'cell phone': 7, 'tv': 60}
-        # Adjusted Focal Length for typical smartphone wide-angle lenses
         self.FOCAL_LENGTH = 2000 
         self.last_speech_time = 0
-        self.SPEECH_COOLDOWN = 4 # Increased slightly to prevent overlapping
+        self.SPEECH_COOLDOWN = 4 
+        
+        # Flashlight State
+        self.flashlight_is_on = False
+        self.brightness_threshold = 35  # Adjust this: Lower = darker room needed to trigger
         
         self.class_names = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
 
@@ -43,7 +46,7 @@ class VisionApp(App):
         layout = BoxLayout(orientation='vertical')
         
         self.top_btn = Button(
-            text="TAP HERE TO CHANGE MODE\n(Mode 1: Multi-Object Detection with directon)",
+            text="TAP HERE TO CHANGE MODE\n(Mode 1: Direction Mode Active)",
             background_color=(0.1, 0.5, 0.8, 1), font_size='18sp', size_hint_y=0.15, halign='center'
         )
         self.top_btn.bind(on_release=self.toggle_mode)
@@ -83,6 +86,21 @@ class VisionApp(App):
         layout.add_widget(self.bottom_btn)
         return layout
 
+    def set_flashlight(self, state):
+        """Internal helper to toggle the Android Flashlight"""
+        if platform == 'android' and self.flashlight_is_on != state:
+            try:
+                PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                Context = autoclass('android.content.Context')
+                cameraManager = PythonActivity.mActivity.getSystemService(Context.CAMERA_SERVICE)
+                # Usually '0' is the back camera with flash
+                cameraId = cameraManager.getCameraIdList()[0]
+                cameraManager.setTorchMode(cameraId, state)
+                self.flashlight_is_on = state
+                Logger.info(f"FLASHLIGHT: System turned {'ON' if state else 'OFF'}")
+            except Exception as e:
+                Logger.error(f"FLASHLIGHT: Error toggling: {e}")
+
     def on_slider_value_change(self, instance, value):
         self.slider_label.text = f"{int(value)}%"
 
@@ -97,7 +115,6 @@ class VisionApp(App):
             try:
                 PythonActivity = autoclass('org.kivy.android.PythonActivity')
                 Context = autoclass('android.content.Context')
-                # Initialize TTS
                 self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
                 self.vibrator = PythonActivity.mActivity.getSystemService(Context.VIBRATOR_SERVICE)
                 Clock.schedule_once(lambda dt: self.tts.setSpeechRate(self.speed_slider.value) if self.tts else None, 1.5)
@@ -133,7 +150,7 @@ class VisionApp(App):
     def _connect_camera(self, dt):
         try:
             self.preview.connect_camera(camera_id='back', enable_analyze_pixels=True)
-            self.speak("AI vision activated. Mode 1 active. To change mode. Tap on your phone's top screen. To close the application. Tap on the bottom screen.")
+            self.speak("AI vision activated. Mode 1 active. Automatic light system ready.")
         except Exception as e:
             Logger.error(f"CAMERA: Error {e}")
 
@@ -144,15 +161,14 @@ class VisionApp(App):
         self.top_btn.text = f"TAP HERE TO CHANGE MODE\n({msg} Active)"
 
     def check_close_app(self, instance):
-        self.speak("Closing application.Thank you.")
+        self.set_flashlight(False) # Turn off light on exit
+        self.speak("Closing application. Thank you.")
         self.preview.disconnect_camera()
         Clock.schedule_once(lambda dt: self.stop(), 0.5)
 
     def speak(self, text):
         if self.tts:
-            try: 
-                # CHANGED: Using 1 (QUEUE_ADD) instead of 0 (QUEUE_FLUSH) to prevent cutting off
-                self.tts.speak(text, 1, None)
+            try: self.tts.speak(text, 1, None)
             except: pass
 
     def vibrate(self, duration_ms):
@@ -175,6 +191,16 @@ class VisionApp(App):
             channels = len(pixels) // (width * height)
             frame = np.frombuffer(pixels, dtype=np.uint8).reshape((height, width, channels))
             rgb = frame[:, :, :3] 
+
+            # --- AUTO FLASHLIGHT LOGIC ---
+            # Calculate average brightness of the frame
+            avg_brightness = np.mean(rgb)
+            if avg_brightness < self.brightness_threshold:
+                self.set_flashlight(True)
+            elif avg_brightness > (self.brightness_threshold + 15): # Add "buffer" to prevent flickering
+                self.set_flashlight(False)
+            # -----------------------------
+
             img = Image.fromarray(rgb).resize((640, 640))
             input_data = np.expand_dims(np.array(img), axis=0).astype(np.float32) / 255.0
             
@@ -221,7 +247,6 @@ class VisionApp(App):
                                 speech_segments.append(segment)
                     else:
                         if i == 0:
-                            # Width Calculation
                             width_px = w if w > 1.0 else w * 640
                             dist_cm = self.get_distance_cm(name, width_px, width)
                             
@@ -229,7 +254,6 @@ class VisionApp(App):
                                 self.vibrate(150 if dist_cm > 50 else 400)
 
                             if now - self.last_speech_time > self.SPEECH_COOLDOWN:
-                                # --- FORCED FEET LOGIC (3 feet = 91.44 cm) ---
                                 if dist_cm < 91.44:
                                     dist_str = f"{int(dist_cm)} centimeters"
                                 else:
