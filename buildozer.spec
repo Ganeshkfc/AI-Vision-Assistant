@@ -19,8 +19,6 @@ android.ndk_api = 24
 
 android.permissions = CAMERA, INTERNET, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE, READ_MEDIA_IMAGES, VIBRATE, FLASHLIGHT
 
-android.features = {"name": "android.hardware.camera.flash", "required": false}
-
 android.private_storage = True
 android.accept_sdk_license = True
 
