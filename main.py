@@ -11,6 +11,7 @@ from kivy.clock import Clock
 from kivy.utils import platform
 from kivy.logger import Logger
 from camera4kivy import Preview
+import colorsys
 
 if platform == 'android':
     from jnius import autoclass
@@ -29,13 +30,10 @@ class VisionApp(App):
     def build(self):
         self.current_mode = 1 
         self.KNOWN_WIDTHS = {'person': 50, 'chair': 45, 'bottle': 8, 'cell phone': 7, 'tv': 60}
+        # Adjusted Focal Length for typical smartphone wide-angle lenses
         self.FOCAL_LENGTH = 2000 
         self.last_speech_time = 0
-        self.SPEECH_COOLDOWN = 4 
-        
-        # Flashlight State
-        self.flashlight_is_on = False
-        self.brightness_threshold = 100  # High sensitivity: turns on in dim light
+        self.SPEECH_COOLDOWN = 4 # Increased slightly to prevent overlapping
         
         self.class_names = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
 
@@ -46,7 +44,7 @@ class VisionApp(App):
         layout = BoxLayout(orientation='vertical')
         
         self.top_btn = Button(
-            text="TAP HERE TO CHANGE MODE\n(Mode 1: Direction Mode)",
+            text="TAP HERE TO CHANGE MODE\n(Mode 1: Multi-Object Detection with directon)",
             background_color=(0.1, 0.5, 0.8, 1), font_size='18sp', size_hint_y=0.15, halign='center'
         )
         self.top_btn.bind(on_release=self.toggle_mode)
@@ -86,38 +84,6 @@ class VisionApp(App):
         layout.add_widget(self.bottom_btn)
         return layout
 
-    def set_flashlight(self, state):
-        """Finds the correct camera with a flash and toggles it"""
-        if platform == 'android' and self.flashlight_is_on != state:
-            try:
-                PythonActivity = autoclass('org.kivy.android.PythonActivity')
-                Context = autoclass('android.content.Context')
-                CameraCharacteristics = autoclass('android.hardware.camera2.CameraCharacteristics')
-                
-                cameraManager = PythonActivity.mActivity.getSystemService(Context.CAMERA_SERVICE)
-                for cameraId in cameraManager.getCameraIdList():
-                    chars = cameraManager.getCameraCharacteristics(cameraId)
-                    hasFlash = chars.get(CameraCharacteristics.FLASH_INFO_AVAILABLE)
-                    if hasFlash:
-                        cameraManager.setTorchMode(cameraId, state)
-                        self.flashlight_is_on = state
-                        break
-            except Exception as e:
-                Logger.error(f"FLASHLIGHT: {e}")
-
-    def get_color_name(self, r, g, b):
-        """Basic logic to speak the color name"""
-        if r > 210 and g > 210 and b > 210: return "White"
-        if r < 45 and g < 45 and b < 45: return "Black"
-        
-        if r > g and r > b:
-            if g > 100: return "Yellow or Orange"
-            if b > 100: return "Pink or Purple"
-            return "Red"
-        if g > r and g > b: return "Green"
-        if b > r and b > g: return "Blue"
-        return "Gray"
-
     def on_slider_value_change(self, instance, value):
         self.slider_label.text = f"{int(value)}%"
 
@@ -132,6 +98,7 @@ class VisionApp(App):
             try:
                 PythonActivity = autoclass('org.kivy.android.PythonActivity')
                 Context = autoclass('android.content.Context')
+                # Initialize TTS
                 self.tts = autoclass('android.speech.tts.TextToSpeech')(PythonActivity.mActivity, None)
                 self.vibrator = PythonActivity.mActivity.getSystemService(Context.VIBRATOR_SERVICE)
                 Clock.schedule_once(lambda dt: self.tts.setSpeechRate(self.speed_slider.value) if self.tts else None, 1.5)
@@ -167,28 +134,34 @@ class VisionApp(App):
     def _connect_camera(self, dt):
         try:
             self.preview.connect_camera(camera_id='back', enable_analyze_pixels=True)
-            self.speak("AI vision activated. Mode 1 enabled.")
+            self.speak("AI vision activated. Mode 1 active. To change mode. Tap on your phone's top screen. To close the application. Tap on the bottom screen.")
         except Exception as e:
             Logger.error(f"CAMERA: Error {e}")
 
     def toggle_mode(self, instance):
-        self.current_mode += 1
-        if self.current_mode > 3: self.current_mode = 1
-        
-        names = {1: "Direction Mode", 2: "Distance Mode", 3: "Color Detection Mode"}
-        msg = names[self.current_mode]
-        self.speak(msg)
+        if self.current_mode == 1:
+            self.current_mode = 2
+            msg = "Distance Mode"
+        elif self.current_mode == 2:
+            self.current_mode = 3
+            msg = "Color Detection Mode"
+        else:
+            self.current_mode = 1
+            msg = "Direction Mode"
+            
+        self.speak(msg + " enabled")
         self.top_btn.text = f"TAP HERE TO CHANGE MODE\n({msg} Active)"
 
     def check_close_app(self, instance):
-        self.set_flashlight(False)
-        self.speak("Closing application. Thank you.")
+        self.speak("Closing application.Thank you.")
         self.preview.disconnect_camera()
         Clock.schedule_once(lambda dt: self.stop(), 0.5)
 
     def speak(self, text):
         if self.tts:
-            try: self.tts.speak(text, 1, None)
+            try: 
+                # CHANGED: Using 1 (QUEUE_ADD) instead of 0 (QUEUE_FLUSH) to prevent cutting off
+                self.tts.speak(text, 1, None)
             except: pass
 
     def vibrate(self, duration_ms):
@@ -199,6 +172,26 @@ class VisionApp(App):
     def get_distance_cm(self, label, width_px, frame_w):
         real_w = self.KNOWN_WIDTHS.get(label, 30)
         return (real_w * self.FOCAL_LENGTH) / max(width_px, 1)
+
+    def get_advanced_color(self, r, g, b):
+        h, s, v = colorsys.rgb_to_hsv(r/255.0, g/255.0, b/255.0)
+        h *= 360
+        s *= 100
+        v *= 100
+
+        if v < 15: return "Black"
+        if v > 85 and s < 10: return "White"
+        if s < 15: return "Grey"
+
+        if h < 11 or h > 351: return "Red"
+        if h < 45: return "Orange"
+        if h < 64: return "Yellow"
+        if h < 150: return "Green"
+        if h < 180: return "Cyan"
+        if h < 255: return "Blue"
+        if h < 300: return "Purple"
+        if h < 351: return "Pink"
+        return "Unknown Color"
 
     def analyze_frame(self, pixels, *args):
         if not self.interpreter: return
@@ -212,29 +205,23 @@ class VisionApp(App):
             frame = np.frombuffer(pixels, dtype=np.uint8).reshape((height, width, channels))
             rgb = frame[:, :, :3] 
 
-            # --- ROBUST AUTO FLASHLIGHT ---
-            avg_brightness = np.mean(rgb)
-            if avg_brightness < self.brightness_threshold:
-                self.set_flashlight(True)
-            elif avg_brightness > (self.brightness_threshold + 30):
-                self.set_flashlight(False)
-
             now = time.time()
 
-            # --- MODE 3: COLOR DETECTION ---
+            # --- MODE 3: COLOR DETECTION LOGIC ---
             if self.current_mode == 3:
                 if now - self.last_speech_time > self.SPEECH_COOLDOWN:
-                    cx, cy = width // 2, height // 2
-                    patch = rgb[cy-30:cy+30, cx-30:cx+30]
-                    avg_rgb = np.mean(patch, axis=(0, 1))
-                    color_name = self.get_color_name(avg_rgb[0], avg_rgb[1], avg_rgb[2])
-                    self.speak(f"Color is {color_name}")
+                    # Sample center 50x50 area for high accuracy
+                    center_x, center_y = width // 2, height // 2
+                    sample = rgb[center_y-25:center_y+25, center_x-25:center_x+25]
+                    avg_color = np.mean(sample, axis=(0, 1))
+                    color_name = self.get_advanced_color(avg_color[0], avg_color[1], avg_color[2])
+                    self.speak(f"Detected color is {color_name}")
                     self.last_speech_time = now
                 return
 
-            # --- MODE 1 & 2: OBJECT DETECTION ---
             img = Image.fromarray(rgb).resize((640, 640))
             input_data = np.expand_dims(np.array(img), axis=0).astype(np.float32) / 255.0
+            
             if self.input_details[0]['shape'][1] == 3: 
                 input_data = np.transpose(input_data, (0, 3, 1, 2))
                 
@@ -250,30 +237,47 @@ class VisionApp(App):
                 valid_boxes = output[mask]
                 valid_scores = scores[mask]
                 valid_class_ids = np.argmax(valid_boxes[:, 4:], axis=1)
+                
                 sort_idx = np.argsort(valid_scores)[::-1]
                 top_k = min(3, len(sort_idx))
+                best_boxes = valid_boxes[sort_idx][:top_k]
+                best_classes = valid_class_ids[sort_idx][:top_k]
                 
                 speech_segments = []
-                for i in range(top_k):
-                    class_id = int(valid_class_ids[sort_idx[i]])
+
+                for i in range(len(best_classes)):
+                    class_id = int(best_classes[i])
                     name = self.class_names[class_id]
-                    xc, yc, w, h = valid_boxes[sort_idx[i]][:4]
+                    xc, yc, w, h = best_boxes[i][:4]
                     
-                    pos = xc if xc <= 1.0 else xc / 640.0
-                    if pos < 0.35: direction = "on your left"
-                    elif pos > 0.65: direction = "on your right"
-                    else: direction = "in front of you"
+                    val = xc if xc <= 1.0 else xc / 640.0
+                    relative_pos = val 
+                    
+                    if relative_pos < 0.35: direction = "on your left"
+                    elif relative_pos > 0.65: direction = "on your right"
+                    else: direction = "In front of you"
 
                     if self.current_mode == 1:
                         if now - self.last_speech_time > self.SPEECH_COOLDOWN:
-                            speech_segments.append(f"{name} {direction}")
+                            segment = f"{name} {direction}"
+                            if segment not in speech_segments:
+                                speech_segments.append(segment)
                     else:
                         if i == 0:
+                            # Width Calculation
                             width_px = w if w > 1.0 else w * 640
                             dist_cm = self.get_distance_cm(name, width_px, width)
-                            if dist_cm < 100: self.vibrate(200 if dist_cm > 50 else 500)
+                            
+                            # VIBRATION REMOVED AS REQUESTED
+
                             if now - self.last_speech_time > self.SPEECH_COOLDOWN:
-                                dist_str = f"{int(dist_cm)} centimeters" if dist_cm < 91 else f"{dist_cm/30.48:.1f} feet"
+                                # --- FORCED FEET LOGIC (3 feet = 91.44 cm) ---
+                                if dist_cm < 91.44:
+                                    dist_str = f"{int(dist_cm)} centimeters"
+                                else:
+                                    feet_val = dist_cm / 30.48
+                                    dist_str = f"{feet_val:.1f} feet"
+                                
                                 speech_segments.append(f"{name} {direction}, {dist_str}")
 
                 if speech_segments:
