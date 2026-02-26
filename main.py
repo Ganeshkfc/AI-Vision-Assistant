@@ -35,8 +35,7 @@ class VisionApp(App):
         
         # Flashlight State
         self.flashlight_is_on = False
-        # Increased to 100 so it turns on in "little bit dark" rooms
-        self.brightness_threshold = 100  
+        self.brightness_threshold = 100  # High sensitivity: turns on in dim light
         
         self.class_names = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
 
@@ -47,7 +46,7 @@ class VisionApp(App):
         layout = BoxLayout(orientation='vertical')
         
         self.top_btn = Button(
-            text="TAP TO CHANGE MODE\n(Mode 1: Direction Mode)",
+            text="TAP HERE TO CHANGE MODE\n(Mode 1: Direction Mode)",
             background_color=(0.1, 0.5, 0.8, 1), font_size='18sp', size_hint_y=0.15, halign='center'
         )
         self.top_btn.bind(on_release=self.toggle_mode)
@@ -88,30 +87,36 @@ class VisionApp(App):
         return layout
 
     def set_flashlight(self, state):
+        """Finds the correct camera with a flash and toggles it"""
         if platform == 'android' and self.flashlight_is_on != state:
             try:
                 PythonActivity = autoclass('org.kivy.android.PythonActivity')
                 Context = autoclass('android.content.Context')
+                CameraCharacteristics = autoclass('android.hardware.camera2.CameraCharacteristics')
+                
                 cameraManager = PythonActivity.mActivity.getSystemService(Context.CAMERA_SERVICE)
-                cameraId = cameraManager.getCameraIdList()[0]
-                cameraManager.setTorchMode(cameraId, state)
-                self.flashlight_is_on = state
+                for cameraId in cameraManager.getCameraIdList():
+                    chars = cameraManager.getCameraCharacteristics(cameraId)
+                    hasFlash = chars.get(CameraCharacteristics.FLASH_INFO_AVAILABLE)
+                    if hasFlash:
+                        cameraManager.setTorchMode(cameraId, state)
+                        self.flashlight_is_on = state
+                        break
             except Exception as e:
-                Logger.error(f"FLASHLIGHT: Error: {e}")
+                Logger.error(f"FLASHLIGHT: {e}")
 
     def get_color_name(self, r, g, b):
-        """Simple logic to identify the dominant color"""
-        if r > 200 and g > 200 and b > 200: return "White"
-        if r < 50 and g < 50 and b < 50: return "Black"
+        """Basic logic to speak the color name"""
+        if r > 210 and g > 210 and b > 210: return "White"
+        if r < 45 and g < 45 and b < 45: return "Black"
         
-        colors = {"Red": (r), "Green": (g), "Blue": (b)}
-        dominant = max(colors, key=colors.get)
-        
-        if dominant == "Red" and g > 100: return "Yellow or Orange"
-        if dominant == "Blue" and g > 150: return "Cyan or Light Blue"
-        if dominant == "Red" and b > 100: return "Purple or Pink"
-        
-        return dominant
+        if r > g and r > b:
+            if g > 100: return "Yellow or Orange"
+            if b > 100: return "Pink or Purple"
+            return "Red"
+        if g > r and g > b: return "Green"
+        if b > r and b > g: return "Blue"
+        return "Gray"
 
     def on_slider_value_change(self, instance, value):
         self.slider_label.text = f"{int(value)}%"
@@ -162,7 +167,7 @@ class VisionApp(App):
     def _connect_camera(self, dt):
         try:
             self.preview.connect_camera(camera_id='back', enable_analyze_pixels=True)
-            self.speak("AI Vision started. Mode 1 active.")
+            self.speak("AI vision activated. Mode 1 enabled.")
         except Exception as e:
             Logger.error(f"CAMERA: Error {e}")
 
@@ -170,14 +175,14 @@ class VisionApp(App):
         self.current_mode += 1
         if self.current_mode > 3: self.current_mode = 1
         
-        modes = {1: "Direction Mode", 2: "Distance Mode", 3: "Color Detection Mode"}
-        msg = modes[self.current_mode]
-        self.speak(msg + " active")
-        self.top_btn.text = f"TAP TO CHANGE MODE\n({msg})"
+        names = {1: "Direction Mode", 2: "Distance Mode", 3: "Color Detection Mode"}
+        msg = names[self.current_mode]
+        self.speak(msg)
+        self.top_btn.text = f"TAP HERE TO CHANGE MODE\n({msg} Active)"
 
     def check_close_app(self, instance):
         self.set_flashlight(False)
-        self.speak("Closing application.")
+        self.speak("Closing application. Thank you.")
         self.preview.disconnect_camera()
         Clock.schedule_once(lambda dt: self.stop(), 0.5)
 
@@ -207,7 +212,7 @@ class VisionApp(App):
             frame = np.frombuffer(pixels, dtype=np.uint8).reshape((height, width, channels))
             rgb = frame[:, :, :3] 
 
-            # --- AUTO FLASHLIGHT ---
+            # --- ROBUST AUTO FLASHLIGHT ---
             avg_brightness = np.mean(rgb)
             if avg_brightness < self.brightness_threshold:
                 self.set_flashlight(True)
@@ -219,16 +224,15 @@ class VisionApp(App):
             # --- MODE 3: COLOR DETECTION ---
             if self.current_mode == 3:
                 if now - self.last_speech_time > self.SPEECH_COOLDOWN:
-                    # Look at 50x50 center patch
-                    center_x, center_y = width // 2, height // 2
-                    patch = rgb[center_y-25:center_y+25, center_x-25:center_x+25]
-                    avg_color = np.mean(patch, axis=(0, 1))
-                    color_name = self.get_color_name(avg_color[0], avg_color[1], avg_color[2])
+                    cx, cy = width // 2, height // 2
+                    patch = rgb[cy-30:cy+30, cx-30:cx+30]
+                    avg_rgb = np.mean(patch, axis=(0, 1))
+                    color_name = self.get_color_name(avg_rgb[0], avg_rgb[1], avg_rgb[2])
                     self.speak(f"Color is {color_name}")
                     self.last_speech_time = now
                 return
 
-            # --- MODES 1 & 2: OBJECT DETECTION ---
+            # --- MODE 1 & 2: OBJECT DETECTION ---
             img = Image.fromarray(rgb).resize((640, 640))
             input_data = np.expand_dims(np.array(img), axis=0).astype(np.float32) / 255.0
             if self.input_details[0]['shape'][1] == 3: 
@@ -255,23 +259,24 @@ class VisionApp(App):
                     name = self.class_names[class_id]
                     xc, yc, w, h = valid_boxes[sort_idx[i]][:4]
                     
-                    val = xc if xc <= 1.0 else xc / 640.0
-                    if val < 0.35: direction = "on your left"
-                    elif val > 0.65: direction = "on your right"
-                    else: direction = "In front of you"
+                    pos = xc if xc <= 1.0 else xc / 640.0
+                    if pos < 0.35: direction = "on your left"
+                    elif pos > 0.65: direction = "on your right"
+                    else: direction = "in front of you"
 
                     if self.current_mode == 1:
                         if now - self.last_speech_time > self.SPEECH_COOLDOWN:
                             speech_segments.append(f"{name} {direction}")
-                    elif self.current_mode == 2 and i == 0:
-                        width_px = w if w > 1.0 else w * 640
-                        dist_cm = self.get_distance_cm(name, width_px, width)
-                        if dist_cm < 100: self.vibrate(200)
-                        if now - self.last_speech_time > self.SPEECH_COOLDOWN:
-                            dist_str = f"{int(dist_cm)} cm" if dist_cm < 91 else f"{dist_cm/30.48:.1f} feet"
-                            speech_segments.append(f"{name} {direction}, {dist_str}")
+                    else:
+                        if i == 0:
+                            width_px = w if w > 1.0 else w * 640
+                            dist_cm = self.get_distance_cm(name, width_px, width)
+                            if dist_cm < 100: self.vibrate(200 if dist_cm > 50 else 500)
+                            if now - self.last_speech_time > self.SPEECH_COOLDOWN:
+                                dist_str = f"{int(dist_cm)} centimeters" if dist_cm < 91 else f"{dist_cm/30.48:.1f} feet"
+                                speech_segments.append(f"{name} {direction}, {dist_str}")
 
-                if speech_segments and (now - self.last_speech_time > self.SPEECH_COOLDOWN):
+                if speech_segments:
                     self.speak(", ".join(speech_segments))
                     self.last_speech_time = now
 
