@@ -11,7 +11,7 @@ version = 1.0
 requirements = python3, kivy==2.3.0, pyjnius, camera4kivy, gestures4kivy, android, numpy, pillow, tflite-runtime
 
 orientation = portrait
-android.api = 33
+android.api = 34
 # FIXED: Increased to 24 to fix Python 3.11 compatibility errors
 android.minapi = 24
 android.ndk = 25b
