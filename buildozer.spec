@@ -1,7 +1,7 @@
 [app]
 title = AI Vision Assistant
 package.name = aivisionassistant
-package.domain = org.aivision
+package.domain = com.ganesh.aivision
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,tflite,txt,java
 source.exclude_dirs = tests, bin, venv, .venv, .git, .github
