@@ -56,17 +56,16 @@ jobs:
           sudo sysctl vm.swappiness=10
           free -h
 
-      # --- THIS IS THE CRITICAL SECTION I GAVE YOU ---
       - name: Setup Android SDK and Fix Path
         run: |
           # 1. Accept licenses
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
-          # 2. Install specific Android 33 components
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-33" "build-tools;33.0.0" "ndk;25.2.9519653"
+          # 2. Install specific Android 34 components (UPDATED HERE)
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-34" "build-tools;34.0.0" "ndk;25.2.9519653"
           # 3. Create the symlink so Buildozer can find sdkmanager
           sudo mkdir -p /usr/local/lib/android/sdk/tools/bin
           sudo ln -s /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager /usr/local/lib/android/sdk/tools/bin/sdkmanager
-
+          
       - name: Build APK
         run: |
           export PATH=$PATH:~/.local/bin
